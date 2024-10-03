@@ -13,7 +13,7 @@ from common.constants import (
     DOCKER_ROBOMIMIC_DATASET_DIR,
     STATE_SHAPE_META,
 )
-#import robomimic.utils.file_utils as FileUtils
+import robomimic.utils.file_utils as FileUtils
 from typing import Any, Dict
 
 
@@ -34,6 +34,34 @@ class HiddenPrints:
 def to_np(x):
     return x.detach().cpu().numpy()
 
+def get_robocasa_dataset_path_and_env_meta(
+    env_id,
+    type = "success",
+    done_mode=0,
+):
+    """
+    Returns the path to the Robomimic dataset and environment metadata.
+
+    Args:
+        env_id (str): The ID of the environment.
+        collection_type (str, optional): The type of data collection. Defaults to "ph".
+        obs_type (str, optional): The type of observations. Defaults to "image".
+        shaped (bool, optional): Whether the dataset is shaped or not. Defaults to False.
+        image_size (int, optional): The size of the images in the dataset. Defaults to 128.
+
+    Returns:
+        tuple: A tuple containing the dataset path and environment metadata.
+    """
+    assert int(done_mode) in [0, 1, 2]
+
+    #
+    root_dir = "/home/yilinwu/data/robocasa"
+
+    dataset_path = f"{env_id}/demo_im128_{type}.hdf5" 
+    dataset_path = Path(root_dir, dataset_path)
+    print('dataset_path', dataset_path)
+    env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
+    return dataset_path, env_meta
 
 def get_robomimic_dataset_path_and_env_meta(
     env_id,

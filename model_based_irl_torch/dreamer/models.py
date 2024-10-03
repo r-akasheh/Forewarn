@@ -318,7 +318,11 @@ class WorldModel(nn.Module):
         # For all keys in obs which contain "image", normalize the values by 255.0
         for key, value in obs.items():
             if "image" in key:
-                obs[key] = torch.Tensor(np.array(value)) / 255.0
+                if isinstance(value, np.ndarray):
+                    obs[key] = torch.Tensor(np.array(value)) / 255.0
+                else: 
+                    assert torch.max(value) > 1.0, torch.max(value)
+                    obs[key] = value / 255.0
 
         if "discount" in obs:
             obs["discount"] *= self._config.discount
@@ -329,7 +333,7 @@ class WorldModel(nn.Module):
         # 'is_terminal' is necesarry to train cont_head
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
-        obs = {k: torch.Tensor(np.array(v)).to(self._config.device) for k, v in obs.items()}
+        obs = {k: torch.Tensor(np.array(v)).to(self._config.device) if isinstance(v, np.ndarray) else torch.Tensor(v).to(self._config.device) for k, v in obs.items()}
         return obs
 
     def video_pred(self, data):
@@ -345,28 +349,22 @@ class WorldModel(nn.Module):
         '''recon = self.heads["decoder"](self.dynamics.get_feat(states))[
             "agentview_image"
         ].mode()[:6]
-        recon_hand = self.heads["decoder"](self.dynamics.get_feat(states))[
-            "robot0_eye_in_hand_image"
-        ].mode()[:6]'''
-        recon = self.heads["decoder"](self.dynamics.get_feat(states))[
-            "image"
-        ].mode()[:6]
+        '''
+        image_keys = self._config.obs_keys
+        recon = torch.cat([self.heads["decoder"](self.dynamics.get_feat(states))[key].mode()[:6] for key in image_keys], 3)
+        # recon = self.heads["decoder"](self.dynamics.get_feat(states))[
+        #     "image"
+        # ].mode()[:6]
+       
 
         init = {k: v[:, -1] for k, v in states.items()}
         prior = self.dynamics.imagine_with_action(data["action"][:6, obs_steps:], init)
-        
-        openl = self.heads["decoder"](self.dynamics.get_feat(prior))[
-            "image"
-        ].mode()
-        '''openl_hand = self.heads["decoder"](self.dynamics.get_feat(prior))[
-            "robot0_eye_in_hand_image"
-        ].mode()'''
-        
+        openl = torch.cat([self.heads["decoder"](self.dynamics.get_feat(prior))[key].mode() for key in image_keys], 3)
         
         
         
         #model_hand = torch.cat([recon_hand[:, :5], openl_hand], 1)
-        truth = data["image"][:6]
+        truth = torch.cat([data[key][:6] for key in image_keys], 3)
 
         row, col = torch.where(data['is_first'][:6, obs_steps:] == 1.)
         for i in range(row.size(0)):

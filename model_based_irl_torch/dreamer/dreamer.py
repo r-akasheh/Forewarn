@@ -5,7 +5,7 @@ import pathlib
 import torch
 
 from torch import nn
-import dreamer.exploration as expl
+# import dreamer.exploration as expl
 import dreamer.models as models
 import dreamer.tools as tools
 from common.utils import to_np, combine_dictionaries
@@ -47,21 +47,20 @@ class Dreamer(nn.Module):
         self._dataset = dataset
         self._expert_dataset = expert_dataset
         self._hybrid_training = expert_dataset is not None
-
         self._wm = models.WorldModel(obs_space, act_space, self._step, config)
-        self._task_behavior = models.ImagBehavior(config, self._wm)
+        # self._task_behavior = models.ImagBehavior(config, self._wm)
         if (
             config.compile and os.name != "nt"
         ):  # compilation is not supported on windows
             self._wm = torch.compile(self._wm)
-            self._task_behavior = torch.compile(self._task_behavior)
+            # self._task_behavior = torch.compile(self._task_behavior)
 
-        reward = lambda f, s, a: self._wm.heads["reward"](f).mean()  # noqa: E731
-        self._expl_behavior = dict(
-            greedy=lambda: self._task_behavior,
-            random=lambda: expl.Random(config, act_space),
-            plan2explore=lambda: expl.Plan2Explore(config, self._wm, reward),
-        )[config.expl_behavior]().to(self._config.device)
+        # reward = lambda f, s, a: self._wm.heads["reward"](f).mean()  # noqa: E731
+        # self._expl_behavior = dict(
+        #     greedy=lambda: self._task_behavior,
+        #     random=lambda: expl.Random(config, act_space),
+        #     plan2explore=lambda: expl.Plan2Explore(config, self._wm, reward),
+        # )[config.expl_behavior]().to(self._config.device)
 
         if (
             config.pretrain_actor_steps > 0
@@ -95,12 +94,12 @@ class Dreamer(nn.Module):
                 self._metrics["update_count"] = self._update_count
             self._maybe_log_metrics(video_pred_log=self._config.video_pred_log)
 
-        policy_output, state = self._policy(obs, state, training)
+        # policy_output, state = self._policy(obs, state, training)
 
-        if training:
-            self._step += len(reset)
-            self._logger.step = self._config.action_repeat * self._step
-        return policy_output, state
+        # if training:
+        #     self._step += len(reset)
+        #     self._logger.step = self._config.action_repeat * self._step
+        # return policy_output, state
 
     def _train(self, data, expert_data=None):
         metrics = {}
@@ -110,15 +109,15 @@ class Dreamer(nn.Module):
             data = combine_dictionaries(data, expert_data, take_half=True)
         post, context, mets = self._wm._train(data)
         metrics.update(mets)
-        start = post
+        # start = post
 
-        # train actor
-        metrics.update(
-            self._task_behavior._train(start, self._reward_fn, expert_data)[-1]
-        )
-        if self._config.expl_behavior != "greedy":
-            mets = self._expl_behavior.train(start, context, data)[-1]
-            metrics.update({"expl_" + key: value for key, value in mets.items()})
+        # # train actor
+        # metrics.update(
+        #     self._task_behavior._train(start, self._reward_fn, expert_data)[-1]
+        # )
+        # if self._config.expl_behavior != "greedy":
+        #     mets = self._expl_behavior.train(start, context, data)[-1]
+        #     metrics.update({"expl_" + key: value for key, value in mets.items()})
 
         self._update_running_metrics(metrics)
 
@@ -306,7 +305,7 @@ class Dreamer(nn.Module):
     def pretrain_model_only(self, data, step=None):
         metrics = {}
         wm = self._wm
-        actor = self._task_behavior.actor
+        # actor = self._task_behavior.actor
         data = wm.preprocess(data)
         if self._config.pretrain_annealing is None:
             recon_weight = 1.0
@@ -319,7 +318,7 @@ class Dreamer(nn.Module):
             print(self._config.pretrain_annealing)
             raise Exception("Annealing strategy must be None or Linear")
 
-        with tools.RequiresGrad(wm), tools.RequiresGrad(actor):
+        with tools.RequiresGrad(wm):#, tools.RequiresGrad(actor):
             with torch.cuda.amp.autocast(wm._use_amp):
                 embed = wm.encoder(data)
                 # post: z_t, prior: \hat{z}_t
@@ -402,7 +401,7 @@ class Dreamer(nn.Module):
 
     def pretrain_regress_obs(self, data, obs_mlp, obs_opt, eval=False):
         wm = self._wm
-        actor = self._task_behavior.actor
+        # actor = self._task_behavior.actor
         data = wm.preprocess(data)
         if eval:
             obs_mlp.eval()
@@ -726,19 +725,20 @@ class Dreamer(nn.Module):
             }
             if config.recon_pretrain:
                 model_params["params"] += list(self._wm.heads["decoder"].parameters())
-            actor_params = {
-                "params": list(self._task_behavior.actor.parameters()),
-                "lr": config.actor["lr"],
-                "eps": config.actor["eps"],
-                "clip": config.actor["grad_clip"],
-            }
-            self.pretrain_params = list(model_params["params"]) + list(
-                actor_params["params"]
-            )
+            # actor_params = {
+            #     "params": list(self._task_behavior.actor.parameters()),
+            #     "lr": config.actor["lr"],
+            #     "eps": config.actor["eps"],
+            #     "clip": config.actor["grad_clip"],
+            # }
+            self.pretrain_params = list(model_params["params"]) 
+            #+ list(
+            #    actor_params["params"]
+            #)
             self.pretrain_opt = tools.Optimizer(
-                "pretrain_opt", [model_params, actor_params], **standard_kwargs
-            )
-            self.actor_params = list(self._task_behavior.actor.parameters())
+                "pretrain_opt", [model_params, ], **standard_kwargs
+            ) #actor_params
+            # self.actor_params = list(self._task_behavior.actor.parameters())
             if config.pretrain_ema:
                 self.ema = EMAModel(
                     parameters=self.actor_params,

@@ -14,7 +14,8 @@ HORIZONS = {
     "square": 300,
     "Square": 300,
     "NutAssemblySquare": 300,
-    "dubins": 100
+    "dubins": 100,
+    'PnPCounterToSink': 2000,
 }
 
 CORNELL_CLUSTER_ROBOMIMIC_DATASET_DIR = Path(
