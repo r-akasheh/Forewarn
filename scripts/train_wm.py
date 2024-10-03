@@ -18,7 +18,7 @@ saferl_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../safety_
 sys.path.append(saferl_dir)
 print(sys.path)
 
-from safety_rl.gym_reachability import gym_reachability  # Custom Gym env.
+# from safety_rl.gym_reachability import gym_reachability  # Custom Gym env.
 
 
 import numpy as np
@@ -29,7 +29,7 @@ from torch import distributions as torchd
 from tqdm import trange
 
 import dreamer.tools as tools
-import envs.wrappers as wrappers
+# import envs.wrappers as wrappers
 from common.constants import HORIZONS, IMAGE_OBS_KEYS
 from common.utils import (
     create_shape_meta,
@@ -38,7 +38,7 @@ from common.utils import (
     combine_dictionaries,
 )
 from dreamer.dreamer import Dreamer
-from dreamer.parallel import Damy, Parallel
+# from dreamer.parallel import Damy, Parallel
 #from environments.env_make import make_env_robomimic
 from termcolor import cprint
 from functools import partial
@@ -51,6 +51,33 @@ from dreamer.tools import ModelEvaluator
 from gym import spaces
 from gym.spaces import Discrete 
 import gym
+
+def mixed_success_failure_sample(
+    batch_size, success_dataset, failure_dataset, device, remove_obs_stack=False
+):
+    """ "
+    Sample 50% from expert dataset and 50% from self.train_eps
+    If remove_obs_stack is True, keep only latest obs in the batch
+    """
+    assert batch_size % 2 == 0, "Batch Size should be even."
+
+    success_batch = next(success_dataset)
+    failure_batch = next(failure_dataset)
+
+    # Merge the two batches
+    data_batch = {}
+    for key in success_batch.keys():
+        if key in failure_batch.keys():
+            success_batch[key] = torch.tensor(success_batch[key], dtype=torch.float32)
+            failure_batch[key] = torch.tensor(failure_batch[key], dtype=torch.float32)
+            data_batch[key] = torch.cat(
+                [success_batch[key], failure_batch[key]], dim=0
+            ).to(device)
+
+    if remove_obs_stack:
+        data_batch = remove_obs_stack(data_batch)
+
+    return data_batch
 
 def train_eval(config):
     tools.set_seed_everywhere(config.seed)
@@ -82,47 +109,70 @@ def train_eval(config):
 
     # ==================== Create dataset ====================
     # expert replay buffer
-    expert_eps = collections.OrderedDict()
-    print(expert_eps)
-    tools.fill_expert_dataset_dubins(config, expert_eps)
-    expert_dataset = make_dataset(expert_eps, config)
+    # expert_eps = collections.OrderedDict()
+    success_eps = collections.OrderedDict()
+    print(success_eps)
+    # tools.fill_expert_dataset_dubins(config, expert_eps)
+    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_robocasa(config, success_eps, type='success')
+    # expert_dataset = make_dataset(expert_eps, config)
+    success_dataset = make_dataset(success_eps, config)
+    failure_eps = collections.OrderedDict()
+    tools.fill_expert_dataset_robocasa(config, failure_eps, type='failure')
+    failure_dataset = make_dataset(failure_eps, config)
+    # sample = mixed_success_failure_sample(success_dataset=success_dataset, failure_dataset=failure_dataset, batch_size=config.batch_size, device=config.device)
+    
     # validation replay buffer
-    expert_val_eps = collections.OrderedDict()
-    tools.fill_expert_dataset_dubins(config, expert_val_eps, is_val_set=True)
+    success_val_eps = collections.OrderedDict()
+    tools.fill_expert_dataset_robocasa(config, success_val_eps, is_val_set=True, type='success')
+    success_val_dataset = make_dataset(success_val_eps, config)
+    failure_val_eps = collections.OrderedDict() 
+    tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, type='failure')
+    failure_val_dataset = make_dataset(failure_val_eps, config)
 
     # split expert dataset into train and eval
-    obs_train_eps = collections.OrderedDict()
-    obs_eval_eps = collections.OrderedDict()
-    for i, (key, value) in enumerate(expert_eps.items()):
-        if i < int(len(expert_eps) * 0.7):
-            obs_train_eps[key] = value
+    obs_train_success_eps = collections.OrderedDict()
+    obs_eval_success_eps = collections.OrderedDict()
+    obs_train_failure_eps = collections.OrderedDict()
+    obs_eval_failure_eps = collections.OrderedDict()
+    for i, (key, value) in enumerate(success_eps.items()):
+        if i < int(len(success_eps) * 0.7):
+            obs_train_success_eps[key] = value
         else:
-            obs_eval_eps[key] = value
+            obs_eval_success_eps[key] = value
+    for i, (key, value) in enumerate(failure_eps.items()):
+        if i < int(len(failure_eps) * 0.7):
+            obs_train_failure_eps[key] = value
+        else:
+            obs_eval_failure_eps[key] = value
 
-    obs_eval_dataset = make_dataset(obs_eval_eps, config)
-    obs_train_dataset = make_dataset(obs_train_eps, config)
+    obs_eval_success_dataset = make_dataset(obs_eval_success_eps, config)
+    obs_train_success_dataset = make_dataset(obs_train_success_eps, config)
+    obs_eval_failure_dataset = make_dataset(obs_eval_failure_eps, config)
+    obs_train_failure_dataset = make_dataset(obs_train_failure_eps, config)
 
-    # learner + eval replay buffer
-    if config.offline_traindir:
-        # possibly replace 'data/{dataset}/{model}" with keys in config
-        directory = config.offline_traindir.format(**vars(config))
-    else:
-        directory = config.traindir
-    train_eps = tools.load_episodes(directory, limit=config.prefill)
-    if config.offline_evaldir:
-        directory = config.offline_evaldir.format(**vars(config))
-    else:
-        directory = config.evaldir
-    eval_eps = tools.load_episodes(directory, limit=1)
-    train_dataset = make_dataset(train_eps, config)
-    eval_dataset = make_dataset(expert_val_eps, config)
+    # # learner + eval replay buffer
+    # if config.offline_traindir:
+    #     # possibly replace 'data/{dataset}/{model}" with keys in config
+    #     directory = config.offline_traindir.format(**vars(config))
+    # else:
+    #     directory = config.traindir
+    # # train_eps = tools.load_episodes(directory, limit=config.prefill)
+    # if config.offline_evaldir:
+    #     directory = config.offline_evaldir.format(**vars(config))
+    # else:
+    #     directory = config.evaldir
+    # # eval_eps = tools.load_episodes(directory, limit=1)
+    # train_dataset = make_dataset(train_eps, config)
+    # eval_dataset = make_dataset(expert_val_eps, config)
+    
 
     # ==================== Create envs ====================
     
 
 
     # == CONFIGURATION ==
-    env_name = "dubins_car_img-v1"
+    # env_name = "dubins_car_img-v1"
+    env_name = 'robocasa-pnpcountertosink-img'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     maxUpdates = config.maxUpdates
     updateTimes = config.updateTimes
@@ -137,20 +187,19 @@ def train_eval(config):
         sample_inside_obs = False
 
     print(env_name)
-    print(gym_reachability)
-    train_env = gym.make(
-        env_name, config=config, device=device, mode=config.mode, doneType=config.doneType,
-        sample_inside_obs=sample_inside_obs
-    )
+    # train_env = gym.make(
+    #     env_name, config=config, device=device, mode=config.mode, doneType=config.doneType,
+    #     sample_inside_obs=sample_inside_obs
+    # )
 
-    print(train_env.observation_space)
-    print(train_env.action_space)
-    train_envs = [train_env]
-    eval_env = gym.make(
-        env_name, config=config, device=device, mode=config.mode, doneType=config.doneType,
-        sample_inside_obs=sample_inside_obs
-    )
-    eval_envs = [eval_env]
+    # print(train_env.observation_space)
+    # print(train_env.action_space)
+    # train_envs = [train_env]
+    # eval_env = gym.make(
+    #     env_name, config=config, device=device, mode=config.mode, doneType=config.doneType,
+    #     sample_inside_obs=sample_inside_obs
+    # )
+    # eval_envs = [eval_env]
 
     '''train_envs = [make_env(config) for i in range(config.envs)]
     eval_envs = [make_env(config) for i in range(config.envs)]
@@ -162,31 +211,33 @@ def train_eval(config):
         eval_envs = [Damy(env) for env in eval_envs]
     acts = train_envs[0].action_space'''
     ### TODO: CLEAN ABOVE ###
-    acts = train_envs[0].action_space
-    print(dir(acts))
+    # acts = train_envs[0].action_space
+    print(dir(action_space))
     bounds = np.array([[-1.1, 1.1], [-1.1, 1.1], [0, 2 * np.pi]])
     low = bounds[:, 0]
     high = bounds[:, 1]
 
-    # Gym variables.
-    midpoint = (low + high) / 2.0
-    interval = high -low
-    observation_space = spaces.Box(
-        np.float32(midpoint - interval/2),
-        np.float32(midpoint + interval/2),
-    )
+    # # Gym variables.
+    # midpoint = (low + high) / 2.0
+    # interval = high -low
+    # observation_space = spaces.Box(
+    #     np.float32(midpoint - interval/2),
+    #     np.float32(midpoint + interval/2),
+    # )
 
-    print(f"Action Space: {acts}.")# Low: {acts.low}. High: {acts.high}")
-    config.num_actions = acts.n if hasattr(acts, "n") else acts.shape[0]
+    print(f"Action Space: {action_space}.")# Low: {acts.low}. High: {acts.high}")
+    config.num_actions = action_space.n if hasattr(action_space, "n") else action_space.shape[0]
 
     # ==================== Create Agent ====================
     agent = Dreamer(
-        train_envs[0].observation_space,
-        train_envs[0].action_space,
+        # train_envs[0].observation_space,
+        # train_envs[0].action_space,
+        observation_space,
+        action_space,
         config,
         logger,
-        train_dataset,
-        expert_dataset=expert_dataset if config.hybrid_training else None,
+        success_dataset,
+        expert_dataset=failure_dataset if config.hybrid_training else None,
     ).to(config.device)
     agent.requires_grad_(requires_grad=False)
     if config.from_ckpt and Path(config.from_ckpt).exists():
@@ -249,59 +300,75 @@ def train_eval(config):
 
     def eval_obs_recon():
         recon_steps = 101
-        obs_mlp, obs_opt = agent._wm._init_obs_mlp(config, 3)
-        train_loss = []
-        eval_loss = []
+        obs_mlp, obs_opt = agent._wm._init_obs_mlp(config, config.priv_dim)
+        train_loss_success = []
+        eval_loss_success = []
+        train_loss_failure = []
+        eval_loss_failure = []
         for i in range(recon_steps):
             if i % int(recon_steps/4) == 0:
-                new_loss = agent.pretrain_regress_obs(
-                    next(obs_eval_dataset), obs_mlp, obs_opt, eval=True
+                new_loss_success = agent.pretrain_regress_obs(
+                    next(obs_eval_success_dataset), obs_mlp, obs_opt, eval=True
                 )
-                eval_loss.append(new_loss)
+                eval_loss_success.append(new_loss_success)
+                new_loss_failure = agent.pretrain_regress_obs(
+                    next(obs_eval_failure_dataset), obs_mlp, obs_opt, eval=True
+                )
+                eval_loss_failure.append(new_loss_failure)
             else:
-                new_loss = agent.pretrain_regress_obs(
-                    next(obs_train_dataset), obs_mlp, obs_opt
+                new_loss_success = agent.pretrain_regress_obs(
+                    next(obs_train_success_dataset), obs_mlp, obs_opt
                 )
-                train_loss.append(new_loss)
-        log_plot("train_recon_loss", train_loss)
-        log_plot("eval_recon_loss", eval_loss)
-        logger.scalar("pretrain/train_recon_loss_min", np.min(train_loss))
-        logger.scalar("pretrain/eval_recon_loss_min", np.min(eval_loss))
+                new_loss_failure = agent.pretrain_regress_obs(
+                    next(obs_train_failure_dataset), obs_mlp, obs_opt
+                )
+                train_loss_success.append(new_loss_success)
+                train_loss_failure.append(new_loss_failure)
+        log_plot("train_recon_loss_for_success", train_loss_success)
+        log_plot("eval_recon_loss_for_success", eval_loss_success)
+        log_plot("train_recon_loss_for_failure", train_loss_failure)
+        log_plot("eval_recon_loss_for_failure", eval_loss_failure)
+        logger.scalar("pretrain/train_recon_loss_min_for_success", np.min(train_loss_success))
+        logger.scalar("pretrain/eval_recon_loss_min_for_success", np.min(eval_loss_success))
+        logger.scalar("pretrain/train_recon_loss_min_for_failure", np.min(train_loss_failure))
+        logger.scalar("pretrain/eval_recon_loss_min_for_failure", np.min(eval_loss_failure))
         logger.write(step=logger.step)
         del obs_mlp, obs_opt  # dont need to keep these
-        return np.min(eval_loss)
-    def train_lx(ckpt_name, log_dir):
-        recon_steps = 2501
-        best_pretrain_success_classifier = float("inf")
-        lx_mlp, lx_opt = agent._wm._init_lx_mlp(config, 1)
-        train_loss = []
-        eval_loss = []
-        for i in range(recon_steps):
-            if i % 250 == 0:
-                print('eval')
-                new_loss, eval_plot = agent.train_lx(
-                    next(obs_eval_dataset), lx_mlp, lx_opt, eval=True
-                )
-                eval_loss.append(new_loss)
-                logger.image("classifier", np.transpose(eval_plot, (2, 0, 1)))
-                logger.write(step=i+40000)
-                best_pretrain_success_classifier = tools.save_checkpoint(
-                    ckpt_name, i, new_loss, best_pretrain_success_classifier, lx_mlp, logdir
-                )
+        torch.cuda.empty_cache()
+        return (np.min(eval_loss_success) + np.min(eval_loss_failure))/2
+    
+    # def train_lx(ckpt_name, log_dir):
+    #     recon_steps = 2501
+    #     best_pretrain_success_classifier = float("inf")
+    #     lx_mlp, lx_opt = agent._wm._init_lx_mlp(config, 1)
+    #     train_loss = []
+    #     eval_loss = []
+    #     for i in range(recon_steps):
+    #         if i % 250 == 0:
+    #             print('eval')
+    #             new_loss, eval_plot = agent.train_lx(
+    #                 next(obs_eval_dataset), lx_mlp, lx_opt, eval=True
+    #             )
+    #             eval_loss.append(new_loss)
+    #             logger.image("classifier", np.transpose(eval_plot, (2, 0, 1)))
+    #             logger.write(step=i+40000)
+    #             best_pretrain_success_classifier = tools.save_checkpoint(
+    #                 ckpt_name, i, new_loss, best_pretrain_success_classifier, lx_mlp, logdir
+    #             )
 
-            else:
-                new_loss, _ = agent.train_lx(
-                    next(obs_train_dataset), lx_mlp, lx_opt
-                )
-                train_loss.append(new_loss)
-        log_plot("train_lx_loss", train_loss)
-        log_plot("eval_lx_loss", eval_loss)
-        logger.scalar("pretrain/train_lx_loss_min", np.min(train_loss))
-        logger.scalar("pretrain/eval_lx_loss_min", np.min(eval_loss))
-        logger.write(step=i)
-        print(eval_loss)
-        print('logged')
-        return lx_mlp, lx_opt
+    #         else:
+    #             new_loss, _ = agent.train_lx(
+    #                 next(obs_train_dataset), lx_mlp, lx_opt
+    #             )
+    #             train_loss.append(new_loss)
+    #     log_plot("train_lx_loss", train_loss)
+    #     log_plot("eval_lx_loss", eval_loss)
+    #     logger.scalar("pretrain/train_lx_loss_min", np.min(train_loss))
+    #     logger.scalar("pretrain/eval_lx_loss_min", np.min(eval_loss))
+    #     logger.write(step=i)
+    #     print(eval_loss)
+    #     print('logged')
+    #     return lx_mlp, lx_opt
 
     def evaluate(other_dataset=None, eval_prefix=""):
         agent.eval()
@@ -322,14 +389,21 @@ def train_eval(config):
                 episodes=1,
                 eval_prefix=eval_prefix,
             )'''
-            video_pred = agent._wm.video_pred(next(eval_dataset))
+            video_pred_success = agent._wm.video_pred(next(success_val_dataset))
+            video_pred_failure = agent._wm.video_pred(next(failure_val_dataset))
             #video_pred = agent._wm.video_pred(next(expert_dataset))
-            logger.video("eval_recon/openl_agent", to_np(video_pred))
+            logger.video("eval_recon_success/openl_agent", to_np(video_pred_success))
+            logger.video("eval_recon_failure/openl_agent", to_np(video_pred_failure))
             #logger.video("eval_recon/openl_hand", to_np(video_pred2))
 
             if other_dataset:
-                video_pred = agent._wm.video_pred(next(other_dataset))
-                logger.video("train_recon/openl_agent", to_np(video_pred))
+                for i in range(len(other_dataset)):
+                    video_pred = agent._wm.video_pred(next(other_dataset[i]))
+                    if i == 0:
+                    
+                        logger.video("train_recon_success/openl_agent", to_np(video_pred))
+                    else:
+                        logger.video("train_recon_failure/openl_agent", to_np(video_pred))
                 #logger.video("train_recon/openl_hand", to_np(video_pred2))
 
         # Get stats
@@ -353,34 +427,18 @@ def train_eval(config):
         recon_eval = eval_obs_recon()  # testing observation reconstruction
 
         # Evaluate MSE for pretraining
-        #with torch.no_grad():
-            #eval_agent = tools.DreamerAgent(agent)
-            #avg_mse = tools.evaluate_mse_trajectories(
-            #    eval_agent, expert_val_eps, config
-            #)
-        #logger.scalar(f"{eval_prefix}/validation_mse", avg_mse)
+        # with torch.no_grad():
+        #     eval_agent = tools.DreamerAgent(agent)
+        #     avg_mse = tools.evaluate_mse_trajectories(
+        #        eval_agent, expert_val_eps, config
+        #     )
+        # logger.scalar(f"{eval_prefix}/validation_mse", avg_mse)
 
-        agent.train()
+        # agent.train()
         return recon_eval, recon_eval
         #return eval_score, eval_success
 
-    def collect_rollouts(state, num_steps):
-        agent.eval()
-        eval_policy = functools.partial(agent, training=False)
-        state = tools.simulate(
-            eval_policy,
-            # agent,
-            train_envs,
-            train_eps,
-            config.traindir,
-            logger,
-            limit=config.dataset_size,
-            steps=num_steps,
-            state=state,
-            batch_collect=True,
-        )
-        agent.train()
-        return state
+
 
     # ==================== Actor Pretrain ====================
     total_pretrain_steps = config.pretrain_joint_steps + config.pretrain_actor_steps
@@ -402,10 +460,9 @@ def train_eval(config):
             else "pretrain_actor"
         )
         best_pretrain_success = float("inf")
-        best_pretrain_success = float("inf")
         for step in trange(
             total_pretrain_steps,
-            desc="Encoder + Actor pretraining",
+            desc="World Model pretraining",
             ncols=0,
             leave=False,
         ):
@@ -418,193 +475,29 @@ def train_eval(config):
                
                 print('eval')
                 score, success = evaluate(
-                    other_dataset=expert_dataset, eval_prefix="pretrain"
+                    other_dataset=[success_dataset, failure_dataset], eval_prefix="pretrain"
                 )
                 best_pretrain_success = tools.save_checkpoint(
                     ckpt_name, step, success, best_pretrain_success, agent, logdir
                 )
 
     
-            exp_data = next(expert_dataset)
+            # exp_data = next(expert_dataset)
+            sample = mixed_success_failure_sample(success_dataset=success_dataset, failure_dataset=failure_dataset, batch_size=config.batch_size, device=config.device)
 
-            agent.pretrain_model_only(exp_data, step)
+            agent.pretrain_model_only(sample, step)
             #agent.pretrain_actor_model(exp_data, step)
 
 
-        close_envs(train_envs + eval_envs)
+        # close_envs(train_envs + eval_envs)
     
     # ==================== Training l(x) classifier ====================
-    print('training l(x)')
-    lx_mlp, lx_opt = train_lx('classifier', logdir)
+    # print('training l(x)')
+    # lx_mlp, lx_opt = train_lx('classifier', logdir)
     exit()
 
 
-    # ==================== Prefill dataset ====================
-    state = None
-    if not config.offline_traindir:
-        prefill = max(0, config.prefill - count_steps(config.traindir))
-        print(f"Prefill dataset ({prefill} steps).")
-        print(type(acts))
-        print(type(acts) == Discrete)
-        #if hasattr(acts, "discrete"):
-        if type(acts) == Discrete:
-            random_actor = tools.OneHotDist(
-                torch.zeros(config.num_actions).repeat(config.envs, 1)
-            )
-        else:
-            random_actor = torchd.independent.Independent(
-                torchd.uniform.Uniform(
-                    torch.Tensor(acts.low).repeat(config.envs, 1),
-                    torch.Tensor(acts.high).repeat(config.envs, 1),
-                ),
-                1,
-            )
-
-        def random_agent(o, d, s):
-            action = random_actor.sample()
-            logprob = random_actor.log_prob(action)
-            return {"action": action, "logprob": logprob}, None
-
-        state = tools.simulate(
-            random_agent,
-            train_envs,
-            train_eps,
-            config.traindir,
-            logger,
-            limit=config.dataset_size,
-            steps=prefill,
-        )
-        logger.step += prefill * config.action_repeat
-        print(f"Logger: ({logger.step} steps).")
-
-    # ==================== "Seeding" model on exp+random ====================
-    if config.initial_joint_train_steps > 0:
-        if config.seed_in_batches:
-            collect_rollouts(None, config.initial_joint_train_steps)
-        else:
-            # collect just enough for first batch
-            seeding_state = collect_rollouts(
-                None, config.batch_size * config.batch_length
-            )
-        for _ in trange(
-            config.initial_joint_train_steps, ncols=0, desc="Train model on exp+random"
-        ):
-            expert_data = next(expert_dataset)
-            random_data = next(train_dataset)
-            mixed_data = combine_dictionaries(expert_data, random_data)
-            agent._train_model_only(mixed_data)
-            if not config.seed_in_batches:
-                seeding_state = collect_rollouts(seeding_state, num_steps=1)
-        tools.save_checkpoint("initial_joint_train", 0, 0, 0, agent, logdir)
-
-    # ==================== Main Training Loop ====================
-    # replace actor with ensemble
-    if config.train_residuals:
-        agent._task_behavior.replace_actor_with_ensemble(device=config.device)
-    evaluate(other_dataset=train_dataset, eval_prefix="main")
-
-    # setup num training steps
-    if config.no_joint_steps:
-        assert config.model_only_scale > 0.0 or config.actor_only_scale > 0.0
-        joint_steps = 0
-    else:
-        joint_steps = agent._batch_train_steps
-    model_only_steps = int(config.model_only_scale * agent._batch_train_steps)
-    actor_only_steps = int(config.actor_only_scale * agent._batch_train_steps)
-    reward_only_steps = model_only_steps if config.separate_reward_training else 0
-    total_train_steps = (
-        model_only_steps + reward_only_steps + actor_only_steps + joint_steps
-    )
-    cprint(
-        f"{model_only_steps=}, {reward_only_steps=}, {actor_only_steps=}, {joint_steps=}",
-        "cyan",
-        attrs=["bold"],
-    )
-
-    # setup training metrics
-    ckpt_name = "main"
-    _iter, total_steps = 0, 0
-    best_train_success, success = -float("inf"), 0
-    tbar = trange(int(config.steps), ncols=0, desc="Main Training Loop")
-    print("===================Start Main Training Loop===================")
-    while total_steps < config.steps:
-        # collect batches of data using eval_policy
-        print("Batch Env Steps")
-        state = collect_rollouts(state, num_steps=config.steps_per_batch)
-
-        if config.train_residuals:
-            agent._task_behavior.add_new_residual()
-
-        for step in trange(total_train_steps, desc="Model+Actor Updates", ncols=0):
-            # get data
-            expert_data = possibly_get_expert_data(
-                expert_dataset, config, step, model_only_steps, joint_steps
-            )
-            learner_data = next(train_dataset)
-
-            # decide on train function
-            if step < model_only_steps:
-                train_fn = (
-                    functools.partial(
-                        agent._train_model_only, frozen_heads=["reward", "cont"]
-                    )
-                    if config.separate_reward_training
-                    else agent._train_model_only
-                )
-                only_model_train = True
-            elif step < model_only_steps + reward_only_steps:
-                train_fn = agent._train_reward_only
-                only_model_train = True
-            elif step < model_only_steps + joint_steps:
-                train_fn = agent._train
-                only_model_train = False
-            else:
-                train_fn = agent._train_actor_only
-                only_model_train = False
-
-            # fit model/critic/actor
-            if not only_model_train and (
-                config.hybrid_critic_fitting or config.utd_ratio > 1
-            ):
-                agent._train_critic_only(
-                    train_dataset, expert_dataset, utd_ratio=config.utd_ratio
-                )
-            train_fn(learner_data, expert_data=expert_data)
-
-            # update metrics
-            agent._step += 1
-            agent._update_count += 1
-            agent._logger.step += 1
-            agent._metrics["update_count"] = agent._update_count
-            agent._maybe_log_metrics(video_pred_log=config.video_pred_log)
-
-            if (
-                config.critic_reset_every > 0
-                and agent._step % config.critic_reset_every == 0
-            ):
-                cprint("Resetting last three layers of critic", "cyan", attrs=["bold"])
-                agent._task_behavior.reset_critics()
-
-            if (
-                # step % config.eval_every == 0 or step + 1 == total_train_steps
-                agent._step % config.eval_every == 0
-            ) and config.eval_num_seeds > 0:
-                if not only_model_train:
-                    eval_prefix = "main" if step + 1 == total_train_steps else "iter"
-                    score, success = evaluate(
-                        other_dataset=train_dataset, eval_prefix=eval_prefix
-                    )
-                best_train_success = tools.save_checkpoint(
-                    ckpt_name, step, success, best_train_success, agent, logdir
-                )
-        if config.bc_reg:
-            agent._metrics["bc_reg_weight"] = agent._task_behavior.decay_bc_weight()
-        total_steps += config.steps_per_batch
-        tbar.update(config.steps_per_batch)
-        _iter += 1
-        logger.write()
-
-    close_envs(train_envs + eval_envs)
+    
 
 
 def close_envs(envs):
@@ -652,33 +545,33 @@ def recursive_update(base, update):
             base[key] = value
 
 
-def make_env(config):
-    suite, task = config.task.split("_", 1)
-    assert suite == "robomimic", f"Unknown suite {suite}"
-    assert task in HORIZONS.keys(), f"Unknown task {task}"
-    dataset_path, env_meta = get_robomimic_dataset_path_and_env_meta(
-        env_id=str(task).upper(),
-        shaped=config.shape_rewards,
-        image_size=config.image_size,
-        done_mode=config.done_mode,
-    )
-    shape_meta = create_shape_meta(img_size=config.image_size, include_state=True)
+# def make_env(config):
+#     suite, task = config.task.split("_", 1)
+#     assert suite == "robomimic", f"Unknown suite {suite}"
+#     assert task in HORIZONS.keys(), f"Unknown task {task}"
+#     dataset_path, env_meta = get_robomimic_dataset_path_and_env_meta(
+#         env_id=str(task).upper(),
+#         shaped=config.shape_rewards,
+#         image_size=config.image_size,
+#         done_mode=config.done_mode,
+#     )
+#     shape_meta = create_shape_meta(img_size=config.image_size, include_state=True)
 
-    shape_rewards = config.shape_rewards
-    shift_rewards = config.shift_rewards
-    env = make_env_robomimic(
-        env_meta,
-        IMAGE_OBS_KEYS,
-        shape_meta,
-        add_state=True,
-        reward_shift_wrapper=shift_rewards,
-        reward_shaping=shape_rewards,
-        offscreen_render=False,
-    )
-    env = wrappers.TimeLimit(env, config.time_limit)
-    env = wrappers.SelectAction(env, key="action")
-    env = wrappers.UUID(env)
-    return env
+#     shape_rewards = config.shape_rewards
+#     shift_rewards = config.shift_rewards
+#     env = make_env_robomimic(
+#         env_meta,
+#         IMAGE_OBS_KEYS,
+#         shape_meta,
+#         add_state=True,
+#         reward_shift_wrapper=shift_rewards,
+#         reward_shaping=shape_rewards,
+#         offscreen_render=False,
+#     )
+#     env = wrappers.TimeLimit(env, config.time_limit)
+#     env = wrappers.SelectAction(env, key="action")
+#     env = wrappers.UUID(env)
+#     return env
 
 
 if __name__ == "__main__":
@@ -714,7 +607,7 @@ if __name__ == "__main__":
     final_config = parser.parse_args(remaining)
 
     final_config.logdir = f"{final_config.logdir}/{config.expt_name}"
-    final_config.time_limit = HORIZONS[final_config.task.split("_")[-1]]
+    final_config.time_limit = HORIZONS[final_config.task.split("_")[0]]
 
     print("---------------------")
     cprint(f"Experiment name: {config.expt_name}", "red", attrs=["bold"])
