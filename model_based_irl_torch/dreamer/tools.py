@@ -189,7 +189,7 @@ class Logger:
         # Log videos to WandB
         wandb.log({name: wandb.Video(value, fps=16, format="mp4")}, step=step)
 
-def fill_expert_dataset_robocasa(config, cache, type=None, is_val_set=False):
+def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=False):
     env_name = config.task.split("_", 1)[0]
     selected_obs_keys = config.obs_keys
     if config.multi_task_data:
@@ -210,9 +210,11 @@ def fill_expert_dataset_robocasa(config, cache, type=None, is_val_set=False):
     action_dim = None
 
     for env_name_id, env_name in enumerate(env_names):
+       
         dataset_path, _ = get_robocasa_dataset_path_and_env_meta(
             env_id=env_name,
-            type = type,
+            type = dataset_type,
+            config = config,
             done_mode=config.done_mode,
         )
        
@@ -340,17 +342,17 @@ def fill_expert_dataset_robocasa(config, cache, type=None, is_val_set=False):
             length = len(traj["obs"][pixel_keys[0]])
             cache[f'exp_traj_{i}']  = {}
             for key in pixel_keys:
-                cache[f'exp_traj_{i}'][key] = traj["obs"][key]
+                cache[f'exp_traj_{i}'][key] = np.array(traj["obs"][key])
             # cache[f'exp_traj_{i}']['obs'] = stacked_obs
             cache[f'exp_traj_{i}']['state'] = stacked_obs["state"]
-            cache[f'exp_traj_{i}']['object_state'] = traj["obs"]["object"]
+            cache[f'exp_traj_{i}']['object_state'] = np.array(traj["obs"]["object"])
             cache[f'exp_traj_{i}']['privileged_state'] = np.concatenate(
                 [traj["obs"]["object"][:, :3], concat_state],axis=1, dtype=np.float32,
             )
             cache[f'exp_traj_{i}']['is_first'] = np.array([1] + [0]*(length-1), dtype=np.bool_)
             cache[f'exp_traj_{i}']['is_last'] = np.array(traj["dones"], dtype=np.bool_)
             cache[f'exp_traj_{i}']['is_terminal'] = np.array(traj["dones"], dtype=np.bool_)
-            cache[f'exp_traj_{i}']['action'] = traj["actions"][:, :-5]
+            cache[f'exp_traj_{i}']['action'] = np.array(traj["actions"][:, :-5])
             cache[f'exp_traj_{i}']['discount'] = np.array([1]*length, dtype=np.float32)
             # Fill all the transitions in the cache
             
@@ -389,7 +391,7 @@ def fill_expert_dataset_robocasa(config, cache, type=None, is_val_set=False):
                 color="magenta",
                 attrs=["bold"],
             )
-
+    f.close()
     return  observation_space, action_space, norm_dict, state_dim, action_dim
 
 def fill_expert_dataset(config, cache, is_val_set=False):
@@ -866,11 +868,6 @@ def sample_episodes(episodes, length, seed=0):
                 index = 0
                 possible = length - size
 
-                #for k, v in episode.items():
-                #    print('KEYs')
-                #    print(k)
-                #    print('VALs')
-                #    print(v)
                 ret = {
                     k: np.append(
                         ret[k], v[index : min(index + possible, total)].copy(), axis=0

@@ -39,14 +39,16 @@ defaults:
   pretrain_on_random_mixed: False
 
   # Robomimic data
+  root_dir: '/data/robocasa'
+  visible_arm: True
   exp_name: 'robocasa-pnpctr2sink'
-  image_size: 64
+  image_size: 128
   shape_rewards: True
   shift_rewards: False
   multi_task_data: False
   num_exp_trajs: 90 #90
   obs_keys: ["robot0_agentview_left_image",
-            "robot0_agentview_right_image",
+             "robot0_agentview_right_image",
             "robot0_eye_in_hand_image",]
   state_keys: #['object-state', # 28, 
                [    'robot0_eef_pos', # 3
