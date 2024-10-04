@@ -8,7 +8,7 @@ import pathlib
 import sys
 from datetime import datetime
 from pathlib import Path
-
+from torch.utils.data import Dataset, DataLoader
 import os 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(parent_dir)
@@ -27,7 +27,7 @@ import torch
 from termcolor import cprint
 from torch import distributions as torchd
 from tqdm import trange
-
+import torch.multiprocessing as mp
 import dreamer.tools as tools
 # import envs.wrappers as wrappers
 from common.constants import HORIZONS, IMAGE_OBS_KEYS
@@ -46,7 +46,6 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 from PIL import Image
 from dreamer.tools import ModelEvaluator
-
 # os.environ["MUJOCO_GL"] = "osmesa"
 from gym import spaces
 from gym.spaces import Discrete 
@@ -66,20 +65,22 @@ def mixed_success_failure_sample(
 
     # Merge the two batches
     data_batch = {}
-    for key in success_batch.keys():
-        if key in failure_batch.keys():
-            success_batch[key] = torch.tensor(success_batch[key], dtype=torch.float32)
-            failure_batch[key] = torch.tensor(failure_batch[key], dtype=torch.float32)
-            data_batch[key] = torch.cat(
-                [success_batch[key], failure_batch[key]], dim=0
-            ).to(device)
 
+    for key in success_batch.keys():
+        # Stack the success and failure batches for each key at once and convert to tensor
+        stacked_data = torch.tensor(
+            np.concatenate([success_batch[key], failure_batch[key]], axis=0), 
+            dtype=torch.float32, 
+            device=device  # Move to the correct device in one go
+        )
+        data_batch[key] = stacked_data
     if remove_obs_stack:
         data_batch = remove_obs_stack(data_batch)
 
     return data_batch
 
 def train_eval(config):
+    mp.set_start_method('spawn', force=True) 
     tools.set_seed_everywhere(config.seed)
     if config.deterministic_run:
         tools.enable_deterministic_run()
@@ -113,20 +114,23 @@ def train_eval(config):
     success_eps = collections.OrderedDict()
     print(success_eps)
     # tools.fill_expert_dataset_dubins(config, expert_eps)
-    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_robocasa(config, success_eps, type='success')
+    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_robocasa(config, success_eps, dataset_type='success')
     # expert_dataset = make_dataset(expert_eps, config)
+    #
     success_dataset = make_dataset(success_eps, config)
+   
     failure_eps = collections.OrderedDict()
-    tools.fill_expert_dataset_robocasa(config, failure_eps, type='failure')
+   
+    tools.fill_expert_dataset_robocasa(config, failure_eps, dataset_type='failure')
     failure_dataset = make_dataset(failure_eps, config)
-    # sample = mixed_success_failure_sample(success_dataset=success_dataset, failure_dataset=failure_dataset, batch_size=config.batch_size, device=config.device)
+    
     
     # validation replay buffer
     success_val_eps = collections.OrderedDict()
-    tools.fill_expert_dataset_robocasa(config, success_val_eps, is_val_set=True, type='success')
+    tools.fill_expert_dataset_robocasa(config, success_val_eps, is_val_set=True, dataset_type='success')
     success_val_dataset = make_dataset(success_val_eps, config)
     failure_val_eps = collections.OrderedDict() 
-    tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, type='failure')
+    tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, dataset_type='failure')
     failure_val_dataset = make_dataset(failure_val_eps, config)
 
     # split expert dataset into train and eval
@@ -334,7 +338,7 @@ def train_eval(config):
         logger.scalar("pretrain/eval_recon_loss_min_for_failure", np.min(eval_loss_failure))
         logger.write(step=logger.step)
         del obs_mlp, obs_opt  # dont need to keep these
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         return (np.min(eval_loss_success) + np.min(eval_loss_failure))/2
     
     # def train_lx(ckpt_name, log_dir):
@@ -466,6 +470,7 @@ def train_eval(config):
             ncols=0,
             leave=False,
         ):
+            # start_time = time.time()
             if (
                 config.eval_num_seeds > 0
                 and ((step + 1) % config.eval_every) == 0
@@ -477,15 +482,20 @@ def train_eval(config):
                 score, success = evaluate(
                     other_dataset=[success_dataset, failure_dataset], eval_prefix="pretrain"
                 )
+                # print('evalaute time', time.time() - start_time)
+                # start_time = time.time()
                 best_pretrain_success = tools.save_checkpoint(
                     ckpt_name, step, success, best_pretrain_success, agent, logdir
                 )
 
-    
+            
             # exp_data = next(expert_dataset)
             sample = mixed_success_failure_sample(success_dataset=success_dataset, failure_dataset=failure_dataset, batch_size=config.batch_size, device=config.device)
-
+            # sample = next(success_dataset)
+            # print('sample time', time.time() - start_time)
+            # start_time = time.time()
             agent.pretrain_model_only(sample, step)
+            # print('train time', time.time() - start_time)
             #agent.pretrain_actor_model(exp_data, step)
 
 
