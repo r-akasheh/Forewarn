@@ -475,7 +475,7 @@ def train_eval(config):
             attrs=["bold"],
         )
         ckpt_name = (  # noqa: E731
-            lambda step: "pretrain_joint"
+            lambda step: f"pretrain_joint"
             if step < config.pretrain_joint_steps
             else "pretrain_actor"
         )
