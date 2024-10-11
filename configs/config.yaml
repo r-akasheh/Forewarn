@@ -40,7 +40,7 @@ defaults:
 
   # Robomimic data
   root_dir: '/data/robocasa'
-  failure_data: 'demo_im128_failure_front_wrist_view_120.hdf5'
+  failure_data: 'demo_im128_failure_front_wrist_view_120_1500.hdf5'
   success_data: 'demo_im128_success_im128_front_wrist_view.hdf5'
   visible_arm: False # True
   contrast_bg: True
@@ -156,7 +156,7 @@ defaults:
 
   # Training
   batch_size: 32
-  batch_length: 32 #32
+  batch_length: 16 #32
   train_ratio: 1024
   pretrain: 100
   model_lr: 1e-4

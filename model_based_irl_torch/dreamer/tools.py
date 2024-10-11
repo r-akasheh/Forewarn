@@ -1685,8 +1685,13 @@ def save_checkpoint(
     ckpt_name_str = ckpt_name(step) if callable(ckpt_name) else ckpt_name
 
     # Always save the last model
-    torch.save(items_to_save, logdir / f"{ckpt_name_str}.pt")
-    print("Saved last model to ", logdir / f"{ckpt_name_str}.pt")
+    
+    if (step +1) % 10000 == 0:
+        torch.save(items_to_save, logdir / f"{ckpt_name_str}_{step+1}.pt")
+        print("Saved last model to ", logdir / f"{ckpt_name_str}_{step+1}.pt")
+    else:
+        torch.save(items_to_save, logdir / f"{ckpt_name_str}.pt")
+        print("Saved last model to ", logdir / f"{ckpt_name_str}.pt")
 
     # If current score is better than the best score, save the model as the best model
     if score is not None and score <= best_score:
