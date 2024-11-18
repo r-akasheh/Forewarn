@@ -5,3 +5,5 @@
 	path = safety_rl
 	url = https://github.com/CMU-IntentLab/safety_rl/
 	branch = avoid_only
+[submodule "vlm/llama-recipes"]
+	url = git@github.com:CMU-IntentLab/llama-recipes.git

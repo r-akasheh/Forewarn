@@ -1,3 +1,0 @@
-  0%|                                                                                                                                                                               | 0/536 [00:00<?, ?it/s]
-> /home/yilin/Projects/failure_detection/vlm/vlm_finetune.py(40)process()
--> batch = processor(text=texts, images=images, return_tensors="pt", padding=True)
