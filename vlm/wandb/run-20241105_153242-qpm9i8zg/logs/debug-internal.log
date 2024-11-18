@@ -1,0 +1,18 @@
+{"time":"2024-11-05T15:32:42.239854578-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-05T15:32:42.239861448-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241105_153242-qpm9i8zg/logs/debug-core.log"}
+{"time":"2024-11-05T15:32:42.241560268-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-05T15:32:42.246247008-05:00","level":"INFO","msg":"created new stream","id":"qpm9i8zg"}
+{"time":"2024-11-05T15:32:42.246264525-05:00","level":"INFO","msg":"stream: started","id":"qpm9i8zg"}
+{"time":"2024-11-05T15:32:42.246283123-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"qpm9i8zg"}}
+{"time":"2024-11-05T15:32:42.246273829-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"qpm9i8zg"}}
+{"time":"2024-11-05T15:32:42.246289723-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"qpm9i8zg"}}
+{"time":"2024-11-05T15:32:42.399265049-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-05T15:32:42.399712574-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-05T15:34:09.094416888-05:00","level":"INFO","msg":"stream: closing","id":"qpm9i8zg"}
+{"time":"2024-11-05T15:34:09.09443797-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-05T15:34:09.0964096-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-05T15:34:10.344644437-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-05T15:34:10.621491738-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"qpm9i8zg"}}
+{"time":"2024-11-05T15:34:10.621534272-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"qpm9i8zg"}}
+{"time":"2024-11-05T15:34:10.621606421-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"qpm9i8zg"}}
+{"time":"2024-11-05T15:34:10.621617508-05:00","level":"INFO","msg":"stream: closed","id":"qpm9i8zg"}

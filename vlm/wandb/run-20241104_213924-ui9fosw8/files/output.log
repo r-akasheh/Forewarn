@@ -1,0 +1,159 @@
+  0%|                                                                                                                                                                                 | 0/2 [00:00<?, ?it/s]Traceback (most recent call last):
+  File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 193, in <module>
+    main()
+  File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 186, in main
+    trainer.train()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2113, in train
+    return inner_training_loop(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2474, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3572, in training_step
+    loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3625, in compute_loss
+    outputs = model(**inputs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+    return model_forward(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+    return convert_to_fp32(self.model_forward(*args, **kwargs))
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+    return func(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 921, in catch_errors
+    return callback(frame, cache_entry, hooks, frame_state, skip=1)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 786, in _convert_frame
+    result = inner_convert(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 400, in _convert_frame_assert
+    return _compile(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/contextlib.py", line 79, in inner
+    return func(*args, **kwds)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 676, in _compile
+    guarded_code = compile_inner(code, one_graph, hooks, transform)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/utils.py", line 262, in time_wrapper
+    r = func(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 535, in compile_inner
+    out_code = transform_code_object(code, transform)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/bytecode_transformation.py", line 1036, in transform_code_object
+    transformations(instructions, code_options)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 165, in _fn
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 500, in transform
+    tracer.run()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 2149, in run
+    super().run()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 810, in run
+    and self.step()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 773, in step
+    getattr(self, inst.opname)(inst)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 489, in wrapper
+    return inner_fn(self, inst)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1238, in CALL_FUNCTION_EX
+    isinstance(fn, GetAttrVariable)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/base.py", line 135, in __instancecheck__
+    instance = instance.realize()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/lazy.py", line 58, in realize
+    self._cache.realize(self.parents_tracker)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/lazy.py", line 24, in realize
+    self.vt = VariableBuilder(tx, self.source)(self.value)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/builder.py", line 269, in __call__
+    vt = self._wrap(value)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/builder.py", line 490, in _wrap
+    return self.wrap_module(value)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/builder.py", line 917, in wrap_module
+    assert getattr(
+AssertionError: Dynamo only supports FSDP with use_orig_params=True
+
+from user code:
+   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+    return fn(*args, **kwargs)
+
+Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+
+
+You can suppress this exception and fall back to eager by setting:
+    import torch._dynamo
+    torch._dynamo.config.suppress_errors = True
+
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 193, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 186, in main
+[rank0]:     trainer.train()
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2113, in train
+[rank0]:     return inner_training_loop(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2474, in _inner_training_loop
+[rank0]:     tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3572, in training_step
+[rank0]:     loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3625, in compute_loss
+[rank0]:     outputs = model(**inputs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+[rank0]:     return model_forward(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+[rank0]:     return convert_to_fp32(self.model_forward(*args, **kwargs))
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 921, in catch_errors
+[rank0]:     return callback(frame, cache_entry, hooks, frame_state, skip=1)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 786, in _convert_frame
+[rank0]:     result = inner_convert(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 400, in _convert_frame_assert
+[rank0]:     return _compile(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/contextlib.py", line 79, in inner
+[rank0]:     return func(*args, **kwds)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 676, in _compile
+[rank0]:     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/utils.py", line 262, in time_wrapper
+[rank0]:     r = func(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 535, in compile_inner
+[rank0]:     out_code = transform_code_object(code, transform)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/bytecode_transformation.py", line 1036, in transform_code_object
+[rank0]:     transformations(instructions, code_options)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 165, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/convert_frame.py", line 500, in transform
+[rank0]:     tracer.run()
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 2149, in run
+[rank0]:     super().run()
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 810, in run
+[rank0]:     and self.step()
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 773, in step
+[rank0]:     getattr(self, inst.opname)(inst)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 489, in wrapper
+[rank0]:     return inner_fn(self, inst)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/symbolic_convert.py", line 1238, in CALL_FUNCTION_EX
+[rank0]:     isinstance(fn, GetAttrVariable)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/base.py", line 135, in __instancecheck__
+[rank0]:     instance = instance.realize()
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/lazy.py", line 58, in realize
+[rank0]:     self._cache.realize(self.parents_tracker)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/lazy.py", line 24, in realize
+[rank0]:     self.vt = VariableBuilder(tx, self.source)(self.value)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/builder.py", line 269, in __call__
+[rank0]:     vt = self._wrap(value)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/builder.py", line 490, in _wrap
+[rank0]:     return self.wrap_module(value)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/variables/builder.py", line 917, in wrap_module
+[rank0]:     assert getattr(
+[rank0]: AssertionError: Dynamo only supports FSDP with use_orig_params=True
+
+[rank0]: from user code:
+[rank0]:    File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+[rank0]:     return fn(*args, **kwargs)
+
+[rank0]: Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+
+
+[rank0]: You can suppress this exception and fall back to eager by setting:
+[rank0]:     import torch._dynamo
+[rank0]:     torch._dynamo.config.suppress_errors = True

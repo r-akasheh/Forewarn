@@ -11,7 +11,8 @@ import dreamer.networks as networks
 import dreamer.tools as tools
 from tqdm import trange
 from torch.nn.utils import spectral_norm
-
+from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 def to_np(x):
     return x.detach().cpu().numpy()
 
@@ -41,7 +42,16 @@ class WorldModel(nn.Module):
         self._use_amp = True if config.precision == 16 else False
         self._config = config
         shapes = {k: tuple(v.shape) for k, v in obs_space.spaces.items()}
+        ## for image in shapes dict, change the H, W to the self.image_size
+        for key, value in shapes.items():
+            if "image" in key:
+                shapes[key] = (config.image_size, config.image_size, 3 )
+        print(f"Observation shapes: {shapes}")  # for debugging
+        self.image_size = config.image_size
+        self.transform = transforms.Compose(
+            [transforms.Resize((self.image_size, self.image_size), interpolation=InterpolationMode.BILINEAR, antialias=True), ]
 
+        )
         self._init_model(shapes, config)
         self._init_heads(shapes, config)
         self._init_optims(config)
@@ -319,10 +329,28 @@ class WorldModel(nn.Module):
         for key, value in obs.items():
             if "image" in key:
                 if isinstance(value, np.ndarray):
-                    obs[key] = torch.Tensor(np.array(value)) / 255.0
+                    ## resize the image if the image size is not the same as self.image_size
+                    if value.shape[-2] != self.image_size:
+                        # value = np.array([cv2.resize(img, (self.image_size, self.image_size)) for img in value])
+                        # use torch.transforms.Resize instead of cv2.resize and return a torch 
+                        ## original image size (B, T, H, W, C) -> (B, T, C,H, W)
+                        value = np.transpose(value, (0, 1, 4, 2, 3))
+                        B, T, C, H, W = value.shape
+                        value = torch.Tensor(value.reshape(B*T, C, H, W))
+                        processed_value = self.transform(value.to(self._config.device))/255.0
+                        obs[key] = processed_value.resize(B, T, C, self.image_size, self.image_size).permute(0, 1, 3, 4, 2)
+                    else:
+                        obs[key] = torch.Tensor(np.array(value)) / 255.0
                 else: 
                     assert torch.max(value) > 1.0, torch.max(value)
-                    obs[key] = value / 255.0
+                    if value.size(-2) != self.image_size:
+                        value = value.permute(0, 1, 4, 2, 3)
+                        B, T, C, H, W = value.shape
+                        value = value.reshape(B*T, C, H, W)
+                        processed_value = self.transform(value)/255.0
+                        obs[key] = processed_value.resize(B, T, C, self.image_size, self.image_size).permute(0, 1, 3, 4, 2)
+                    else:
+                        obs[key] = value / 255.0
 
         if "discount" in obs:
             obs["discount"] *= self._config.discount
@@ -333,9 +361,57 @@ class WorldModel(nn.Module):
         # 'is_terminal' is necesarry to train cont_head
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
-        obs = {k: torch.Tensor(np.array(v)).to(self._config.device) if isinstance(v, np.ndarray) else torch.Tensor(v).to(self._config.device) for k, v in obs.items()}
+        # obs = {k: torch.Tensor(np.array(v)).to(self._config.device) if isinstance(v, np.ndarray) else torch.Tensor(v).to(self._config.device) for k, v in obs.items()}
+        # obs = {k: torch.Tensor(np.array(v)) if isinstance(v, np.ndarray) else torch.Tensor(v) for k, v in obs.items()}
+        for k, v in obs.items():
+            if isinstance(v, np.ndarray):
+                obs[k] = torch.Tensor(v)
+            elif isinstance(v, torch.Tensor):
+                obs[k] = v
+
         return obs
 
+    def get_latent(self, data, mode='all'):
+        self.dynamics.sample = False
+        data = self.preprocess(data)
+        with torch.cuda.amp.autocast(self._use_amp):
+            embed = self.encoder(data)
+            post, prior = self.dynamics.observe(embed, data["action"], data["is_first"])
+            if mode == 'all':
+                feat = self.dynamics.get_feat(post)
+            elif mode == 'z':
+                feat = self.dynamics.get_z(post)
+            else: 
+                raise NotImplementedError
+        return feat
+    
+    def video_recon(self, data):
+        data = self.preprocess(data)
+        embed = self.encoder(data)
+
+        obs_steps = self.obs_step
+        
+
+        states, _ = self.dynamics.observe(
+            embed[:6], data["action"][:6], data["is_first"][:6]
+        )
+     
+        image_keys = self._config.obs_keys
+        recon = []
+        truth = []
+        eval_loss = {}
+        for key in image_keys:
+            pred = self.heads["decoder"](self.dynamics.get_feat(states))[key]
+            recon.append(pred.mode())
+            eval_loss[key] = -pred.log_prob(data[key][:6])
+            truth.append(data[key][:6])
+        recon = torch.cat(recon, 3)
+        truth = torch.cat(truth, 3)
+        # recon = torch.cat([self.heads["decoder"](self.dynamics.get_feat(states))[key].mode()[:6] for key in image_keys], 3)
+        # truth = torch.cat([data[key][:6] for key in image_keys], 3)
+        error = (recon - truth + 1.0) / 2.0
+        return torch.cat([truth, recon, error], 2), eval_loss
+    
     def video_pred(self, data):
         data = self.preprocess(data)
         embed = self.encoder(data)

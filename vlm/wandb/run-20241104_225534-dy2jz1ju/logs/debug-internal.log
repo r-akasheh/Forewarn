@@ -1,0 +1,18 @@
+{"time":"2024-11-04T22:55:34.406231908-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T22:55:34.406239058-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_225534-dy2jz1ju/logs/debug-core.log"}
+{"time":"2024-11-04T22:55:34.408007603-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T22:55:34.413140655-05:00","level":"INFO","msg":"created new stream","id":"dy2jz1ju"}
+{"time":"2024-11-04T22:55:34.413155908-05:00","level":"INFO","msg":"stream: started","id":"dy2jz1ju"}
+{"time":"2024-11-04T22:55:34.413172333-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"dy2jz1ju"}}
+{"time":"2024-11-04T22:55:34.413174506-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"dy2jz1ju"}}
+{"time":"2024-11-04T22:55:34.413161577-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"dy2jz1ju"}}
+{"time":"2024-11-04T22:55:34.584799471-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T22:55:34.585517432-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T22:55:49.616966227-05:00","level":"INFO","msg":"stream: closing","id":"dy2jz1ju"}
+{"time":"2024-11-04T22:55:49.616990634-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T22:55:49.619348916-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T22:55:51.077511484-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T22:55:51.167233853-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"dy2jz1ju"}}
+{"time":"2024-11-04T22:55:51.167293102-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"dy2jz1ju"}}
+{"time":"2024-11-04T22:55:51.167294624-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"dy2jz1ju"}}
+{"time":"2024-11-04T22:55:51.167441766-05:00","level":"INFO","msg":"stream: closed","id":"dy2jz1ju"}

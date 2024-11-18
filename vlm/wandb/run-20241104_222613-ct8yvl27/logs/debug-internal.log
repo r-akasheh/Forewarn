@@ -1,0 +1,18 @@
+{"time":"2024-11-04T22:26:13.478694409-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T22:26:13.478701891-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_222613-ct8yvl27/logs/debug-core.log"}
+{"time":"2024-11-04T22:26:13.480488093-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T22:26:13.485489612-05:00","level":"INFO","msg":"created new stream","id":"ct8yvl27"}
+{"time":"2024-11-04T22:26:13.485510363-05:00","level":"INFO","msg":"stream: started","id":"ct8yvl27"}
+{"time":"2024-11-04T22:26:13.485527028-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"ct8yvl27"}}
+{"time":"2024-11-04T22:26:13.485531365-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"ct8yvl27"}}
+{"time":"2024-11-04T22:26:13.485530914-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"ct8yvl27"}}
+{"time":"2024-11-04T22:26:13.653628418-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T22:26:13.654284587-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T22:26:15.92169817-05:00","level":"INFO","msg":"stream: closing","id":"ct8yvl27"}
+{"time":"2024-11-04T22:26:15.921730288-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T22:26:15.924080811-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T22:26:16.323527669-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T22:26:16.470089012-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"ct8yvl27"}}
+{"time":"2024-11-04T22:26:16.470126929-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"ct8yvl27"}}
+{"time":"2024-11-04T22:26:16.470162963-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"ct8yvl27"}}
+{"time":"2024-11-04T22:26:16.470206599-05:00","level":"INFO","msg":"stream: closed","id":"ct8yvl27"}

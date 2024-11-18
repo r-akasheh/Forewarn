@@ -1,0 +1,18 @@
+{"time":"2024-11-04T23:00:21.352063941-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T23:00:21.352080766-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_230021-jaxzobpr/logs/debug-core.log"}
+{"time":"2024-11-04T23:00:21.35372294-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T23:00:21.358400297-05:00","level":"INFO","msg":"created new stream","id":"jaxzobpr"}
+{"time":"2024-11-04T23:00:21.358420127-05:00","level":"INFO","msg":"stream: started","id":"jaxzobpr"}
+{"time":"2024-11-04T23:00:21.358438915-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"jaxzobpr"}}
+{"time":"2024-11-04T23:00:21.358445165-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"jaxzobpr"}}
+{"time":"2024-11-04T23:00:21.358429381-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"jaxzobpr"}}
+{"time":"2024-11-04T23:00:21.50794018-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T23:00:21.508669409-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T23:00:36.569800961-05:00","level":"INFO","msg":"stream: closing","id":"jaxzobpr"}
+{"time":"2024-11-04T23:00:36.569822944-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T23:00:36.571644318-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T23:00:37.801540214-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T23:00:37.89270413-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"jaxzobpr"}}
+{"time":"2024-11-04T23:00:37.892750319-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"jaxzobpr"}}
+{"time":"2024-11-04T23:00:37.892741276-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"jaxzobpr"}}
+{"time":"2024-11-04T23:00:37.892838162-05:00","level":"INFO","msg":"stream: closed","id":"jaxzobpr"}

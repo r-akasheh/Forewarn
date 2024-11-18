@@ -1,0 +1,7 @@
+100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:14<00:00,  7.48s/it]
+{'loss': 23.9494, 'grad_norm': 448.938232421875, 'learning_rate': 1e-05, 'epoch': 1.0}
+                                                                                                                                                                                                            
+{'eval_runtime': 1.7799, 'eval_samples_per_second': 2.247, 'eval_steps_per_second': 0.562, 'epoch': 1.0}
+{'loss': 24.0453, 'grad_norm': 494.73919677734375, 'learning_rate': 0.0, 'epoch': 2.0}
+{'eval_runtime': 1.7879, 'eval_samples_per_second': 2.237, 'eval_steps_per_second': 0.559, 'epoch': 2.0}
+{'train_runtime': 15.5864, 'train_samples_per_second': 0.513, 'train_steps_per_second': 0.128, 'train_loss': 23.997349739074707, 'epoch': 2.0}

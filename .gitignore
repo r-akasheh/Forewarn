@@ -2,5 +2,9 @@ logs/*
 wandb/*
 *.pyc
 */__pycache__/*
-networks/__pycache__
+networks/__pycache__/*
+*.gif
+*egg-info*
+*pyc*
+*vscode*
 __pycache__

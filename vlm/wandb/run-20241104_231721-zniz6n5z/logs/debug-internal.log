@@ -1,0 +1,18 @@
+{"time":"2024-11-04T23:17:21.87090256-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T23:17:21.870910542-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_231721-zniz6n5z/logs/debug-core.log"}
+{"time":"2024-11-04T23:17:21.87259682-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T23:17:21.877322464-05:00","level":"INFO","msg":"created new stream","id":"zniz6n5z"}
+{"time":"2024-11-04T23:17:21.877336195-05:00","level":"INFO","msg":"stream: started","id":"zniz6n5z"}
+{"time":"2024-11-04T23:17:21.877352309-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"zniz6n5z"}}
+{"time":"2024-11-04T23:17:21.877358999-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"zniz6n5z"}}
+{"time":"2024-11-04T23:17:21.877340652-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"zniz6n5z"}}
+{"time":"2024-11-04T23:17:22.026364401-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T23:17:22.026974679-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T23:17:35.266499517-05:00","level":"INFO","msg":"stream: closing","id":"zniz6n5z"}
+{"time":"2024-11-04T23:17:35.266513768-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T23:17:35.269001083-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T23:17:35.619037634-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T23:17:35.853047797-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"zniz6n5z"}}
+{"time":"2024-11-04T23:17:35.853093616-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"zniz6n5z"}}
+{"time":"2024-11-04T23:17:35.853119215-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"zniz6n5z"}}
+{"time":"2024-11-04T23:17:35.853183361-05:00","level":"INFO","msg":"stream: closed","id":"zniz6n5z"}

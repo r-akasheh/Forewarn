@@ -1,0 +1,18 @@
+{"time":"2024-11-04T15:56:20.197108244-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T15:56:20.197121624-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_155620-yj4rf53y/logs/debug-core.log"}
+{"time":"2024-11-04T15:56:20.19879802-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T15:56:20.203936681-05:00","level":"INFO","msg":"created new stream","id":"yj4rf53y"}
+{"time":"2024-11-04T15:56:20.203958975-05:00","level":"INFO","msg":"stream: started","id":"yj4rf53y"}
+{"time":"2024-11-04T15:56:20.203980777-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"yj4rf53y"}}
+{"time":"2024-11-04T15:56:20.203976291-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"yj4rf53y"}}
+{"time":"2024-11-04T15:56:20.203965394-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"yj4rf53y"}}
+{"time":"2024-11-04T15:56:20.371898266-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T15:56:20.372238719-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T15:56:20.505904308-05:00","level":"INFO","msg":"stream: closing","id":"yj4rf53y"}
+{"time":"2024-11-04T15:56:20.505996748-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T15:56:20.507686353-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T15:56:21.904138782-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T15:56:22.023513663-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"yj4rf53y"}}
+{"time":"2024-11-04T15:56:22.023562757-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"yj4rf53y"}}
+{"time":"2024-11-04T15:56:22.023587064-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"yj4rf53y"}}
+{"time":"2024-11-04T15:56:22.02364398-05:00","level":"INFO","msg":"stream: closed","id":"yj4rf53y"}

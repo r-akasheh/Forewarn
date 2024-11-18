@@ -1,0 +1,18 @@
+{"time":"2024-11-04T22:43:45.216235329-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T22:43:45.21624275-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_224345-l9804sl7/logs/debug-core.log"}
+{"time":"2024-11-04T22:43:45.217898883-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T22:43:45.221432101-05:00","level":"INFO","msg":"created new stream","id":"l9804sl7"}
+{"time":"2024-11-04T22:43:45.221443418-05:00","level":"INFO","msg":"stream: started","id":"l9804sl7"}
+{"time":"2024-11-04T22:43:45.221450028-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"l9804sl7"}}
+{"time":"2024-11-04T22:43:45.221459402-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"l9804sl7"}}
+{"time":"2024-11-04T22:43:45.221459292-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"l9804sl7"}}
+{"time":"2024-11-04T22:43:45.345598501-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T22:43:45.346369011-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T22:44:08.069831388-05:00","level":"INFO","msg":"stream: closing","id":"l9804sl7"}
+{"time":"2024-11-04T22:44:08.0698591-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T22:44:08.174519228-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T22:44:08.582652341-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T22:44:08.697104267-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"l9804sl7"}}
+{"time":"2024-11-04T22:44:08.697149005-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"l9804sl7"}}
+{"time":"2024-11-04T22:44:08.697235725-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"l9804sl7"}}
+{"time":"2024-11-04T22:44:08.697248034-05:00","level":"INFO","msg":"stream: closed","id":"l9804sl7"}

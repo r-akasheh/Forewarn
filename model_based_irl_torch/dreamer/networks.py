@@ -180,6 +180,14 @@ class RSSM(nn.Module):
             shape = list(stoch.shape[:-2]) + [self._stoch * self._discrete]
             stoch = stoch.reshape(shape)
         return torch.cat([stoch, state["deter"]], -1)
+    
+    def get_z(self, state):
+        stoch = state["stoch"]
+        if self._discrete:
+            shape = list(stoch.shape[:-2]) + [self._stoch * self._discrete]
+            stoch = stoch.reshape(shape)
+        return stoch
+        
 
     def get_dist(self, state, dtype=None):
         if self._discrete:
@@ -207,7 +215,7 @@ class RSSM(nn.Module):
         # initialize all prev_state
         if prev_state == None or torch.sum(is_first) == len(is_first):
             prev_state = self.initial(len(is_first))
-            prev_action = torch.zeros((len(is_first), self._num_actions)).to(
+            prev_action = torch.zeros((len(is_first), self._num_actions),dtype=is_first.dtype).to(
                 self._device
             )
         # overwrite the prev_state only where is_first=True

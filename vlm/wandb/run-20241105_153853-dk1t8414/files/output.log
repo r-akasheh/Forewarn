@@ -1,0 +1,42 @@
+  0%|                                                                                                                                                                                 | 0/2 [00:00<?, ?it/s]Traceback (most recent call last):
+  File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 198, in <module>
+    main()
+  File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 185, in main
+    trainer.train()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2114, in train
+    return inner_training_loop(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2481, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3579, in training_step
+    loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3633, in compute_loss
+    outputs = model(**inputs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+    return model_forward(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+    return convert_to_fp32(self.model_forward(*args, **kwargs))
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+    return func(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/peft_model.py", line 812, in forward
+    return self.get_base_model()(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/hooks.py", line 170, in new_forward
+    output = module._old_forward(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 2124, in forward
+    outputs = self.language_model(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 1953, in forward
+    loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/loss/loss_utils.py", line 39, in ForCausalLMLoss
+    shift_labels = labels[..., 1:].contiguous()
+TypeError: list indices must be integers or slices, not tuple

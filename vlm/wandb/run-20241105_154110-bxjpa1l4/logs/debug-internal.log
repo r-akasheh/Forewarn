@@ -1,0 +1,18 @@
+{"time":"2024-11-05T15:41:10.178830178-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-05T15:41:10.178837679-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241105_154110-bxjpa1l4/logs/debug-core.log"}
+{"time":"2024-11-05T15:41:10.180437372-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-05T15:41:10.184896666-05:00","level":"INFO","msg":"created new stream","id":"bxjpa1l4"}
+{"time":"2024-11-05T15:41:10.184917107-05:00","level":"INFO","msg":"stream: started","id":"bxjpa1l4"}
+{"time":"2024-11-05T15:41:10.184936056-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"bxjpa1l4"}}
+{"time":"2024-11-05T15:41:10.184938469-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"bxjpa1l4"}}
+{"time":"2024-11-05T15:41:10.184924639-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"bxjpa1l4"}}
+{"time":"2024-11-05T15:41:10.358631814-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-05T15:41:10.359180996-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-05T15:41:12.223715066-05:00","level":"INFO","msg":"stream: closing","id":"bxjpa1l4"}
+{"time":"2024-11-05T15:41:12.223746663-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-05T15:41:12.297764242-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-05T15:41:12.770401911-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-05T15:41:12.881841029-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"bxjpa1l4"}}
+{"time":"2024-11-05T15:41:12.881891315-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"bxjpa1l4"}}
+{"time":"2024-11-05T15:41:12.881899177-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"bxjpa1l4"}}
+{"time":"2024-11-05T15:41:12.881976985-05:00","level":"INFO","msg":"stream: closed","id":"bxjpa1l4"}

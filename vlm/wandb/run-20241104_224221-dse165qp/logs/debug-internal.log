@@ -1,0 +1,18 @@
+{"time":"2024-11-04T22:42:21.405750327-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T22:42:21.405757277-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_224221-dse165qp/logs/debug-core.log"}
+{"time":"2024-11-04T22:42:21.407550236-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T22:42:21.412108956-05:00","level":"INFO","msg":"created new stream","id":"dse165qp"}
+{"time":"2024-11-04T22:42:21.412130518-05:00","level":"INFO","msg":"stream: started","id":"dse165qp"}
+{"time":"2024-11-04T22:42:21.41215148-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"dse165qp"}}
+{"time":"2024-11-04T22:42:21.412138049-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"dse165qp"}}
+{"time":"2024-11-04T22:42:21.412147544-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"dse165qp"}}
+{"time":"2024-11-04T22:42:21.583585043-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T22:42:21.584430946-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T22:42:23.114707103-05:00","level":"INFO","msg":"stream: closing","id":"dse165qp"}
+{"time":"2024-11-04T22:42:23.114737339-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T22:42:23.117088938-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T22:42:23.488793814-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T22:42:25.13348287-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"dse165qp"}}
+{"time":"2024-11-04T22:42:25.133550692-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"dse165qp"}}
+{"time":"2024-11-04T22:42:25.133548989-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"dse165qp"}}
+{"time":"2024-11-04T22:42:25.133687077-05:00","level":"INFO","msg":"stream: closed","id":"dse165qp"}

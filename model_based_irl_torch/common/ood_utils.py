@@ -25,7 +25,7 @@ def load_pca_kmeans(save_path):
     return pca, kmeans
 
 
-def plot_cluster_embedding(success_embeddings, failure_embeddings)
+def plot_cluster_embedding(success_embeddings, failure_embeddings):
     # Assuming you have success and failure embeddings
     # Combine both success and failure embeddings into one dataset
     embeddings = torch.concat((success_embeddings, failure_embeddings))

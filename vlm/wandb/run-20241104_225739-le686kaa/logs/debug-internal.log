@@ -1,0 +1,18 @@
+{"time":"2024-11-04T22:57:39.533583959-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T22:57:39.53359102-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_225739-le686kaa/logs/debug-core.log"}
+{"time":"2024-11-04T22:57:39.538017949-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T22:57:39.54311018-05:00","level":"INFO","msg":"created new stream","id":"le686kaa"}
+{"time":"2024-11-04T22:57:39.543134156-05:00","level":"INFO","msg":"stream: started","id":"le686kaa"}
+{"time":"2024-11-04T22:57:39.54315004-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"le686kaa"}}
+{"time":"2024-11-04T22:57:39.543156039-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"le686kaa"}}
+{"time":"2024-11-04T22:57:39.543161628-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"le686kaa"}}
+{"time":"2024-11-04T22:57:39.996884474-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T22:57:39.99759826-05:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-11-04T22:57:55.062686814-05:00","level":"INFO","msg":"stream: closing","id":"le686kaa"}
+{"time":"2024-11-04T22:57:55.062709998-05:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-11-04T22:57:55.064745325-05:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-11-04T22:57:56.283622727-05:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2024-11-04T22:57:56.396619416-05:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"le686kaa"}}
+{"time":"2024-11-04T22:57:56.396666778-05:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"le686kaa"}}
+{"time":"2024-11-04T22:57:56.396763714-05:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"le686kaa"}}
+{"time":"2024-11-04T22:57:56.396773058-05:00","level":"INFO","msg":"stream: closed","id":"le686kaa"}

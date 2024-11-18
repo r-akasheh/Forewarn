@@ -15,7 +15,7 @@ from io import BytesIO
 from PIL import Image
 import matplotlib.patches as patches
 import io
-from common.ood_utils import train
+from common.ood_utils import train_pca_kmeans
 # os.environ["MUJOCO_GL"] = "osmesa"
 
 
@@ -68,7 +68,13 @@ class Dreamer(nn.Module):
             or config.from_ckpt is not None
         ):
             self._make_pretrain_opt()
-
+    @classmethod
+    def from_pretrained(cls, path, obs_space, act_space, config, logger, dataset, expert_dataset=None):
+        ckpt = torch.load(path)
+        model = cls(obs_space, act_space, config, logger, dataset, expert_dataset)
+        model.load_state_dict(ckpt['agent_state_dict'])
+        # model.eval()
+        return model
     def __call__(self, obs, reset, state=None, training=True):
         # step = self._step
         if training:
@@ -587,21 +593,46 @@ class Dreamer(nn.Module):
     def evaluate_embed(self, data):
         # success_data = data['success']
         # failure_data = data['failure']
-        wm.dynamics.sample = False
+        self._wm.dynamics.sample = False
         embeddings = []
-        for key in data.keys():
-            data = wm.preprocess(data[key])
+        data_dict = data
+        for key in data_dict.keys():
+            if data_dict[key] is None:
+                embeddings.append(None)
+                continue
+            data = self._wm.preprocess(data_dict[key])
         
-            with torch.cuda.amp.autocast(wm._use_amp):
+            with torch.cuda.amp.autocast(self._wm._use_amp):
                 embed = self._wm.encoder(data)
+                ## option 1 encode the embedding with the dynamics model , posterior q(z_t| h_t, x_t), it has some history information
+                ## option 2 get the imagined embedding of the future without ground truth observation prior p(z_t| h_t), 
                 ## first plot the embedding with k_means clustering
                 ## then plot the imagined future embedding wiht k_means clustering
-                post, prior = wm.dynamics.observe(embed, data["action"], data["is_first"])
+                post, prior = self._wm.dynamics.observe(embed, data["action"], data["is_first"])
+                ## return [z_t, h_t] (stoch, deter)
                 feat = self._wm.dynamics.get_feat(post).detach()
-                breakpoint()
+                B, T, D = feat.size()
+                ## feed in every `[k, k+T]` time step obs to get the embedding at time step `k+T`
+                # last_feat = feat[:, -1, :]
+                feat = feat.view(B*T, D)
+                # last_feat = last_feat.view(B, D)
                 embeddings.append(feat)
+                # embeddings.append(last_feat)
         return embeddings[0], embeddings[1]
-            
+    
+    def get_latent(self, data, mode='all'):
+        self._wm.dynamics.sample = False
+        data = self._wm.preprocess(data)
+        with torch.cuda.amp.autocast(self._wm._use_amp):
+            embed = self._wm.encoder(data)
+            post, prior = self._wm.dynamics.observe(embed, data["action"], data["is_first"])
+            if mode == 'all':
+                feat = self._wm.dynamics.get_feat(post)
+            elif mode == 'z':
+                feat = self._wm.dynamics.get_z(post)
+            else: 
+                raise NotImplementedError
+        return feat
                     
                     
                     # x, y, theta = data["privileged_state"][:,:,0], data["privileged_state"][:,:,1], data["privileged_state"][:,:, 2]

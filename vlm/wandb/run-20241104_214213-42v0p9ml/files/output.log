@@ -1,0 +1,261 @@
+  0%|                                                                                                                                                                                 | 0/2 [00:00<?, ?it/s][rank0]:W1104 21:42:15.008632 138697811145856 torch/_logging/_internal.py:1013] [0/0] Profiler function <class 'torch.autograd.profiler.record_function'> will be ignored
+Traceback (most recent call last):
+  File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 193, in <module>
+    main()
+  File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 186, in main
+    trainer.train()
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2113, in train
+    return inner_training_loop(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2474, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3572, in training_step
+    loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3625, in compute_loss
+    outputs = model(**inputs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+    return model_forward(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+    return convert_to_fp32(self.model_forward(*args, **kwargs))
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+    return func(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 857, in forward
+    output = self._fsdp_wrapped_module(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+    return model_forward(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+    return convert_to_fp32(self.model_forward(*args, **kwargs))
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+    return func(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/peft_model.py", line 810, in forward
+    with self._enable_peft_forward_hooks(*args, **kwargs):
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/peft_model.py", line 812, in torch_dynamo_resume_in_forward_at_810
+    return self.get_base_model()(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 2098, in forward
+    vision_outputs = self.vision_model(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 1454, in forward
+    output = self.transformer(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 389, in forward
+    layer_outputs = encoder_layer(
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 857, in forward
+    output = self._fsdp_wrapped_module(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/algorithms/_checkpoint/checkpoint_wrapper.py", line 168, in forward
+    return self.checkpoint_fn(  # type: ignore[misc]
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_compile.py", line 24, in inner
+    return torch._dynamo.disable(fn, recursive)(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/utils/checkpoint.py", line 494, in checkpoint
+    ret = function(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 302, in forward
+    hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 246, in forward
+    query = self.q_proj(hidden_state)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/tuners/lora/layer.py", line 587, in forward
+    result = result + self.lora_magnitude_vector[active_adapter](
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 857, in forward
+    output = self._fsdp_wrapped_module(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/algorithms/_checkpoint/checkpoint_wrapper.py", line 168, in forward
+    return self.checkpoint_fn(  # type: ignore[misc]
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_compile.py", line 24, in inner
+    return torch._dynamo.disable(fn, recursive)(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+    return fn(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/utils/checkpoint.py", line 494, in checkpoint
+    ret = function(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/tuners/lora/dora.py", line 74, in forward
+    x_eye = torch.eye(lora_A.weight.shape[1], device=lora_A.weight.device, dtype=x.dtype)
+IndexError: tuple index out of range
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 193, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/yilin/Projects/failure_detection/vlm/vlm_finetune.py", line 186, in main
+[rank0]:     trainer.train()
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2113, in train
+[rank0]:     return inner_training_loop(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 2474, in _inner_training_loop
+[rank0]:     tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3572, in training_step
+[rank0]:     loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/trainer.py", line 3625, in compute_loss
+[rank0]:     outputs = model(**inputs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+[rank0]:     return model_forward(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+[rank0]:     return convert_to_fp32(self.model_forward(*args, **kwargs))
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 857, in forward
+[rank0]:     output = self._fsdp_wrapped_module(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 820, in forward
+[rank0]:     return model_forward(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/accelerate/utils/operations.py", line 808, in __call__
+[rank0]:     return convert_to_fp32(self.model_forward(*args, **kwargs))
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/amp/autocast_mode.py", line 16, in decorate_autocast
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/peft_model.py", line 810, in forward
+[rank0]:     with self._enable_peft_forward_hooks(*args, **kwargs):
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/peft_model.py", line 812, in torch_dynamo_resume_in_forward_at_810
+[rank0]:     return self.get_base_model()(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 2098, in forward
+[rank0]:     vision_outputs = self.vision_model(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 1454, in forward
+[rank0]:     output = self.transformer(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 389, in forward
+[rank0]:     layer_outputs = encoder_layer(
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 857, in forward
+[rank0]:     output = self._fsdp_wrapped_module(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/algorithms/_checkpoint/checkpoint_wrapper.py", line 168, in forward
+[rank0]:     return self.checkpoint_fn(  # type: ignore[misc]
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_compile.py", line 24, in inner
+[rank0]:     return torch._dynamo.disable(fn, recursive)(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/utils/checkpoint.py", line 494, in checkpoint
+[rank0]:     ret = function(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 302, in forward
+[rank0]:     hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/transformers/models/mllama/modeling_mllama.py", line 246, in forward
+[rank0]:     query = self.q_proj(hidden_state)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/tuners/lora/layer.py", line 587, in forward
+[rank0]:     result = result + self.lora_magnitude_vector[active_adapter](
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 857, in forward
+[rank0]:     output = self._fsdp_wrapped_module(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/distributed/algorithms/_checkpoint/checkpoint_wrapper.py", line 168, in forward
+[rank0]:     return self.checkpoint_fn(  # type: ignore[misc]
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_compile.py", line 24, in inner
+[rank0]:     return torch._dynamo.disable(fn, recursive)(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 451, in _fn
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/_dynamo/external_utils.py", line 36, in inner
+[rank0]:     return fn(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/utils/checkpoint.py", line 494, in checkpoint
+[rank0]:     ret = function(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/yilin/miniconda3/envs/dreamer/lib/python3.10/site-packages/peft/tuners/lora/dora.py", line 74, in forward
+[rank0]:     x_eye = torch.eye(lora_A.weight.shape[1], device=lora_A.weight.device, dtype=x.dtype)
+[rank0]: IndexError: tuple index out of range

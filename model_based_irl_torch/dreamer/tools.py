@@ -189,7 +189,37 @@ class Logger:
         # Log videos to WandB
         wandb.log({name: wandb.Video(value, fps=16, format="mp4")}, step=step)
 
-def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=False):
+
+
+def merge_two_cache_dicts(cache1, cache2):
+    """
+    Merges two cache dictionaries and assigns labels for success (1) and failure (0).
+    
+    Args:
+        cache1 (dict): The main cache dictionary with trajectories labeled as success (1).
+        cache2 (dict): The cache dictionary to be merged into cache1 with trajectories labeled as failure (0).
+        
+    Returns:
+        cache1 (dict): Updated cache1 containing both the original and new trajectories, with appropriate labels.
+    """
+    
+
+    # Add labels for success (1) in cache1
+    for key in cache1.keys():
+        ## create 1 label as the same length of the other elements
+        
+        cache1[key]['label'] = np.ones( cache1[key]['is_first'].shape)# Label success as 1
+    
+    # Add trajectories from cache2 to cache1, with failure label (0)
+    last_key = int(list(cache1.keys())[-1].split('_')[-1])
+    for i, key in enumerate(cache2.keys()):
+        new_key = f"exp_traj_{i + last_key+1}"
+        cache1[new_key] = cache2[key].copy()  # Copy the trajectory to avoid mutation
+        cache1[new_key]['label'] = np.zeros( cache2[key]['is_first'].shape)  # Label failure as 0
+    
+    return cache1
+        
+def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=False, padding=None):
     env_name = config.task.split("_", 1)[0]
     selected_obs_keys = config.obs_keys
     if config.multi_task_data:
@@ -221,14 +251,24 @@ def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=Fa
         f = h5py.File(dataset_path, "r")
    
         demos = list(f["data"].keys())
-
+        inds = np.argsort([int(elem[5:]) for elem in demos])
+        demos = [demos[i] for i in inds]
+        ## filter out the demos whose length is larger than 1500
+        demos = [demo for demo in demos if f['data'][demo]['actions'].shape[0] <= 1500]
+        
         # if is_val_set, we don't fill the first num_exp_trajs which are used for training
         config.num_exp_trajs = (
             len(demos) if config.num_exp_trajs == -1 else config.num_exp_trajs
         )
         if is_val_set:
-            assert config.num_exp_trajs < len(demos), "Not enough expert data for val"
-        burn_in_trajs = config.num_exp_trajs if is_val_set else 0
+            # assert config.num_exp_trajs < len(demos), "Not enough expert data for val"
+            if config.num_exp_trajs >= len(demos):
+                print('not enough expert data for val')
+                burn_in_trajs = 0 if is_val_set else 0 
+            else:
+                burn_in_trajs = config.num_exp_trajs if is_val_set else 0
+        else: 
+            burn_in_trajs = config.num_exp_trajs if is_val_set else 0
         num_fill_trajs = (
             min(len(demos), config.num_exp_trajs + config.validation_mse_trajs)
             if is_val_set
@@ -293,6 +333,7 @@ def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=Fa
             if i < burn_in_trajs:
                 continue
             elif i >= num_fill_trajs:
+                print('last demo index', demos[i])
                 break
 
             traj = f["data"][demo]
@@ -829,7 +870,10 @@ def from_generator(generator, batch_size):
     while True:
         batch = []
         for _ in range(batch_size):
-            batch.append(next(generator))
+            try:
+                batch.append(next(generator))
+            except StopIteration:
+                raise StopIteration
         data = {}
         for key in batch[0].keys():
             data[key] = []
@@ -837,8 +881,271 @@ def from_generator(generator, batch_size):
                 data[key].append(batch[i][key])
             data[key] = np.stack(data[key], 0)
         yield data
+        
+def from_eval_generator(generator, batch_size):
+    """
+    Takes a generator and yields batches of data until the generator is exhausted.
+    """
+    while True:
+        batch = []
+        # try:
+        #     # Gather a batch of data from the generator
+        #     for _ in range(batch_size):
+        #         batch.append(next(generator))
+        # except StopIteration:
+        for _ in range(batch_size):
+            try:
+                new_batch = next(generator)
+            except RuntimeError:
+                
+                # If the generator is exhausted, return the partial batch if it exists
+                if batch:
+                    data = {}
+                    for key in batch[0].keys():
+                        data[key] = []
+                        for i in range(len(batch)):
+                            data[key].append(batch[i][key])
+                        data[key] = np.stack(data[key], 0)
+                    yield data
+                return  # Stop when the generator is fully exhausted
+            batch.append(new_batch)
+        
+        # Organize the batch into data dictionary (similar structure as single sample)
+        data = {}
+        for key in batch[0].keys():
+            data[key] = []
+            for i in range(batch_size):
+                data[key].append(batch[i][key])
+            data[key] = np.stack(data[key], 0)
 
+        yield data       
+# def from_traj_generator(generator, batch_size):
+class EpisodeSampler:
+    def __init__(self, episodes, length, seed=0):
+        self.episodes = episodes
+        self.length = length
+        self.episode_keys = list(episodes.keys())  # List of episode keys
+        self.episode_positions = {key: 0 for key in self.episode_keys}  # Position within each episode
+        self.episode_idx = 0  # Current episode index
+        self.np_random = np.random.RandomState(seed)
+        # for key in self.episode_keys:
+            # episode = self.episodes[key]
+            ## save the trajectory as a video
+            # img_sequence = episode["robot0_agentview_front_image"]
+            ## use imageio to save the video
+            # imageio.mimsave(f'./success_{key}.gif', img_sequence, fps=30)
 
+    def sample_episodes(self):
+        """
+        Iteratively sample through all episodes without resetting until the end.
+        """
+        while self.episode_idx < len(self.episode_keys):
+            episode_key = self.episode_keys[self.episode_idx]
+            episode = self.episodes[episode_key]
+            total = len(next(iter(episode.values())))
+
+            if total < 2:
+                self.episode_idx += 1  # Skip empty or small episodes
+                continue
+
+            start_index = self.episode_positions[episode_key]
+            end_index = min(start_index + self.length, total)
+            # Collect transitions from the current episode
+            ret = {k: v[start_index:end_index].copy() for k, v in episode.items() if "log_" not in k}
+
+            if "is_first" in ret:
+                ret["is_first"][0] = True
+
+            # Update the position in the current episode
+            self.episode_positions[episode_key] = end_index # start_index +1 #
+
+            # If the current episode is exhausted, move to the next episode
+            if end_index + self.length >= total:
+            # if start_index + 1 + self.length >= total:
+                self.episode_idx += 1
+
+            yield ret
+
+        # When all episodes are exhausted, stop iteration
+        raise StopIteration("All episodes have been sampled.")
+
+class EpisodeSpecialSampler(EpisodeSampler):
+    def __init__(self, episodes, length, seed=0):
+        
+        self.episodes = episodes
+        self.length = length
+        self.episode_keys = ['exp_traj_100','exp_traj_101','exp_traj_102', 'exp_traj_103','exp_traj_104', 'exp_traj_105', 'exp_traj_106', 'exp_traj_107','exp_traj_108',  'exp_traj_109'] #',#'exp_traj_106']  #'exp_traj_101',  #'exp_traj_104'] #list(episodes.keys())  # List of episode keys
+        self.episode_positions = dict(exp_traj_100 = 800, exp_traj_101 = 1400, exp_traj_102=880, exp_traj_103=420, exp_traj_104= 700,exp_traj_105 = 600,exp_traj_106=1350, exp_traj_107 = 420, exp_traj_108 = 900,exp_traj_109=1400)#exp_traj_104 =900 ) #{key: 880 for key in self.episode_keys}#{key: 0 for key in self.episode_keys}  # Position within each episode
+        self.episode_idx =0 # 0  # Current episode index
+        self.np_random = np.random.RandomState(seed)
+        # for key in self.episode_keys:
+        #     episode = self.episodes[key]
+        #     ## save the trajectory as a video
+        #     img_sequence = episode["robot0_agentview_front_image"]
+        #     img_with_text = []
+        #     for num,img in enumerate(img_sequence):
+        #         image_height, image_width, _ = img.shape
+    
+        #         # Define font, scale, color, and thickness
+        #         font = cv2.FONT_HERSHEY_SIMPLEX
+        #         font_scale = 0.4
+        #         font_color = (255, 255, 255)  # White color
+        #         font_thickness = 1
+        #         text = f"Frame: {num}"
+        #         # Calculate text size and position (centered at the bottom)
+        #         text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+        #         text_x = (image_width - text_size[0]) // 2
+        #         text_y = image_height - 10  # 10 pixels from the bottom
+        #         frame_with_text = cv2.putText(img, text, (text_x, text_y), font, font_scale, font_color, font_thickness, cv2.LINE_AA)
+        #         img_with_text.append(frame_with_text)
+        #     ## use imageio to save the video
+        #     imageio.mimsave(f'./failure_{key}.gif', img_with_text, fps=30)
+
+class FullEpisodeSampler:
+    def __init__(self):
+        self.episode_index = 0
+        
+    def sample_episodes_with_varied_length(self, episodes, length, seed =0, max_length=1500):   
+        
+        while True:
+            # Randomly select an episode from the dataset
+            # episode_key = np_random.choice(list(episodes.keys()))
+            # episode = episodes[episode_key]
+            try:
+                episode_key = list(episodes.keys())[self.episode_index]
+            except:
+                raise StopIteration
+            episode = episodes[episode_key]
+            # episode = next(iter(episodes.values()))
+            print('episode key', episode_key) 
+            self.episode_index += 1
+            ## save actual length
+            actual_length = len(episode["is_first"].copy())
+        
+            ## The original size is (B, T, D), now we need to shape into (B*T/16, 16, D)
+            ## get the folded size of the episode
+            # Copy the full episode data
+            # ret = {k: v.copy() for k, v in episode.items() if "log_" not in k}
+            ## copy the full episode data and pad the item to max_length, item can be obs, action, etc.
+            ## item can be 1dim array, 2 dim array, 3 dim array, etc.
+            ret = {k: v for k, v in episode.items() if "log_" not in k}
+            
+            
+            # Ensure that the `is_first` key is set correctly for the entire episode
+            if "is_first" in ret and length < max_length:
+                ## set every 16th element to True in ret["is_first"]
+                ret["is_first"][::length] = True
+            ret['actual_length'] = actual_length * np.ones(actual_length, dtype=np.int32)
+            
+            yield ret
+    def sample_full_episodes(self, episodes, length, seed=0, max_length=1500, mode = 'last'):
+        """
+        This function samples entire episodes from a given dataset of episodes. It ensures the `is_first`
+        flag is correctly set for each episode.
+
+        Args:
+            episodes (dict): Dictionary containing multiple episodes. Each episode is a dictionary
+                            with keys for observations, actions, etc.
+            seed (int): Random seed for sampling episodes.
+
+        Yields:
+            dict: A dictionary containing the sampled full episode data, with `is_first` handled properly.
+        """
+        # np_random = np.random.RandomState(seed)
+        
+        while True:
+            # Randomly select an episode from the dataset
+            # episode_key = np_random.choice(list(episodes.keys()))
+            # episode = episodes[episode_key]
+            try:
+                episode_key = list(episodes.keys())[self.episode_index]
+            except:
+                raise StopIteration
+            episode = episodes[episode_key]
+            # episode = next(iter(episodes.values()))
+            print('episode key', episode_key) 
+            self.episode_index += 1
+            ## save actual length
+            actual_length = len(episode["is_first"].copy())
+            print('actual length', actual_length)
+        
+            ## The original size is (B, T, D), now we need to shape into (B*T/16, 16, D)
+            ## get the folded size of the episode
+            # Copy the full episode data
+            # ret = {k: v.copy() for k, v in episode.items() if "log_" not in k}
+            ## copy the full episode data and pad the item to max_length, item can be obs, action, etc.
+            ## item can be 1dim array, 2 dim array, 3 dim array, etc.
+            if mode == 'zero':
+                ret = {k: np.pad(v,  [(0, max_length - len(v))] + [(0, 0)] * (v[0].ndim ),
+                            mode='constant') for k, v in episode.items() if "log_" not in k}
+                ret['actual_length'] = actual_length * np.ones(max_length, dtype=np.int32)
+            elif mode == 'last':
+                ret = {k: np.pad(v,  [(0, max_length - len(v))] + [(0, 0)] * (v[0].ndim ),
+                            mode='edge') for k, v in episode.items() if "log_" not in k}
+                ret['action'][actual_length:, :6] = 0 ## zero out the first 6(pos + axis angle) action for the padded part
+                ret['actual_length'] = max_length * np.ones(max_length, dtype=np.int32)
+            else: 
+                raise NotImplementedError
+            ## 
+            
+            # Ensure that the `is_first` key is set correctly for the entire episode
+            if "is_first" in ret and length < max_length:
+                ## set every 16th element to True in ret["is_first"]
+                ret["is_first"][::length] = True
+            ret['actual_length'] = actual_length * np.ones(max_length, dtype=np.int32)
+            
+            yield ret
+    
+def sample_full_episodes(episodes, length, seed=0, max_length=1500, mode='last'):
+    """
+    This function samples entire episodes from a given dataset of episodes. It ensures the `is_first`
+    flag is correctly set for each episode.
+
+    Args:
+        episodes (dict): Dictionary containing multiple episodes. Each episode is a dictionary
+                         with keys for observations, actions, etc.
+        seed (int): Random seed for sampling episodes.
+
+    Yields:
+        dict: A dictionary containing the sampled full episode data, with `is_first` handled properly.
+    """
+    np_random = np.random.RandomState(seed)
+    
+    while True:
+        # Randomly select an episode from the dataset
+        episode_key = np_random.choice(list(episodes.keys()))
+        episode = episodes[episode_key]
+        ## save actual length
+        actual_length = len(episode["is_first"].copy())
+        print('actual length', actual_length)
+        
+        ## The original size is (B, T, D), now we need to shape into (B*T/16, 16, D)
+        ## get the folded size of the episode
+        # Copy the full episode data
+        # ret = {k: v.copy() for k, v in episode.items() if "log_" not in k}
+        ## copy the full episode data and pad the item to max_length, item can be obs, action, etc.
+        ## item can be 1dim array, 2 dim array, 3 dim array, etc.
+        if mode == 'zero':
+            ret = {k: np.pad(v,  [(0, max_length - len(v))] + [(0, 0)] * (v[0].ndim ),
+                         mode='constant') for k, v in episode.items() if "log_" not in k}
+            ret['actual_length'] = actual_length * np.ones(max_length, dtype=np.int32)
+        elif mode == 'last':
+            ret = {k: np.pad(v,  [(0, max_length - len(v))] + [(0, 0)] * (v[0].ndim ),
+                        mode='edge') for k, v in episode.items() if "log_" not in k}
+            ret['action'][actual_length:, :6] = 0 ## zero out the first 6(pos + axis angle) action for the padded part
+            ret['actual_length'] = max_length * np.ones(max_length, dtype=np.int32)
+        
+        else: 
+            raise NotImplementedError
+        
+        # Ensure that the `is_first` key is set correctly for the entire episode
+        if "is_first" in ret and length < max_length:
+            ## set every 16th element to True in ret["is_first"]
+            ret["is_first"][::length] = True
+        
+        
+        yield ret
+        
 def sample_episodes(episodes, length, seed=0):
     np_random = np.random.RandomState(seed)
     while True:
@@ -1652,6 +1959,24 @@ def recursively_load_optim_state_dict(obj, optimizers_state_dicts):
             obj_now = getattr(obj_now, key)
         obj_now.load_state_dict(state_dict)
 
+def save_classifier_checkpoint(
+    ckpt_name: Union[str, Callable[[int], str]],
+    step: int,
+    agent: Any,
+    logdir: str,
+)-> None:
+    
+    items_to_save = {
+        "agent_state_dict": agent.state_dict(),
+        "optims_state_dict": recursively_collect_optim_state_dict(agent),
+        "global_step": step
+    }
+    if hasattr(agent, "ema"):
+        items_to_save["ema"] = agent.ema.state_dict()
+    ckpt_name_str = ckpt_name(step) if callable(ckpt_name) else ckpt_name
+    torch.save(items_to_save, logdir / f"{ckpt_name_str}_{step}.pt")
+    print('Saving classifier model to ', logdir / f"{ckpt_name_str}_{step}.pt")
+    return 
 
 def save_checkpoint(
     ckpt_name: Union[str, Callable[[int], str]],

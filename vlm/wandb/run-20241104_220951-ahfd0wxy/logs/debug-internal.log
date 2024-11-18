@@ -1,0 +1,10 @@
+{"time":"2024-11-04T22:09:51.661112877-05:00","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2024-11-04T22:09:51.661120299-05:00","level":"INFO","msg":"created symlink","path":"/home/yilin/Projects/failure_detection/vlm/wandb/run-20241104_220951-ahfd0wxy/logs/debug-core.log"}
+{"time":"2024-11-04T22:09:51.662695492-05:00","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2024-11-04T22:09:51.666931456-05:00","level":"INFO","msg":"created new stream","id":"ahfd0wxy"}
+{"time":"2024-11-04T22:09:51.666947521-05:00","level":"INFO","msg":"stream: started","id":"ahfd0wxy"}
+{"time":"2024-11-04T22:09:51.66695391-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"ahfd0wxy"}}
+{"time":"2024-11-04T22:09:51.666974752-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"ahfd0wxy"}}
+{"time":"2024-11-04T22:09:51.666965738-05:00","level":"INFO","msg":"sender: started","stream_id":{"value":"ahfd0wxy"}}
+{"time":"2024-11-04T22:09:51.807613241-05:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-11-04T22:09:51.808203821-05:00","level":"INFO","msg":"Starting system monitor"}
