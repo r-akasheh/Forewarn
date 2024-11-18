@@ -26,6 +26,13 @@ defaults:
   from_prefill_dir: null
   obs_step: 1
 
+  # Debug configs:
+  done_mode: 0 # can be 0, 1, 2
+  bc_loss_only: False    # if True, only train with BC-loss
+  ignore_base_policy: False # if True, ignore base policy in residuals
+  augment_images: False
+  seed_in_batches: True
+  validation_mse_trajs: 20 #10
 
 
   # Debug configs:
