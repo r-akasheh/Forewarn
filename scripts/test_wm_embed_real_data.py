@@ -115,10 +115,33 @@ def main(config):
     if config.debug:
         logger = tools.DebugLogger(logdir, config.action_repeat * step)
     else:
-        logger = tools.Logger(logdir, config.action_repeat * step)
+        logger = tools.Logger(logdir, config.action_repeat * step,name = config.wandb_name)
     logger.config(vars(config))
     logger.write() 
-    success_val_dataset, failure_val_dataset, action_space, observation_space = create_val_dataset(config)
+    # success_val_dataset, failure_val_dataset, action_space, observation_space = create_val_dataset(config)
+    success_eps = collections.OrderedDict()
+    failure_eps = collections.OrderedDict()
+
+    # print(success_eps)
+    # tools.fill_expert_dataset_dubins(config, expert_eps)
+    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data(config, success_eps,failure_eps,)
+    # expert_dataset = make_dataset(expert_eps, config)
+    #
+    # success_dataset = make_dataset(success_eps, config)
+   
+   
+    # tools.fill_expert_dataset_robocasa(config, failure_eps, dataset_type='failure')
+    # failure_dataset = make_dataset(failure_eps, config)
+    
+    
+    # validation replay buffer
+    success_val_eps = collections.OrderedDict()
+    failure_val_eps = collections.OrderedDict() 
+
+    tools.fill_expert_dataset_real_data(config, success_val_eps, failure_val_eps,  is_val_set=True)
+    success_val_dataset = make_dataset(success_val_eps, config)
+    # tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, dataset_type='failure')
+    failure_val_dataset = make_dataset(failure_val_eps, config)
     print(f"Action Space: {action_space}.")# Low: {acts.low}. High: {acts.high}")
     config.num_actions = action_space.n if hasattr(action_space, "n") else action_space.shape[0]
     # ==================== Create Agent ====================
@@ -132,7 +155,7 @@ def main(config):
         None, #success_val_dataset,
         expert_dataset= None #failure_val_dataset if config.hybrid_training else None,
     ).to(config.device)
-    breakpoint()
+    # breakpoint()
     agent.requires_grad_(requires_grad=False)
     if config.from_ckpt and Path(config.from_ckpt).exists():
         print(f"Loading ckpt from {config.from_ckpt}")
@@ -208,11 +231,11 @@ def create_val_dataset(config):
 
 def eval_video_recon(agent, logger, success_val_dataset, failure_val_dataset, imagine=False):
     # Evaluate the policy
-    for i in range(36):
+    for i in range(27):
         if imagine:
             print('Generating videos with imagined latents')
-            video_pred_success, success_loss = agent._wm.video_pred(next(success_val_dataset), batch_size = 32)
-            video_pred_failure, failure_loss = agent._wm.video_pred(next(failure_val_dataset), batch_size = 32)
+            video_pred_success, success_loss = agent._wm.video_pred(next(success_val_dataset), )#batch_size = 32)
+            video_pred_failure, failure_loss = agent._wm.video_pred(next(failure_val_dataset),) #batch_size = 32)
             #video_pred = agent._wm.video_pred(next(expert_dataset))
             
             #logger.video("eval_recon/openl_hand", to_np(video_pred2))

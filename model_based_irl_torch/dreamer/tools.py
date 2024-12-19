@@ -20,7 +20,7 @@ from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from common.utils import get_dataset_path_and_meta_info, get_robocasa_dataset_path_and_env_meta
+from common.utils import get_dataset_path_and_meta_info, get_robocasa_dataset_path_and_env_meta, get_real_dataset_path_and_env_meta
 import dreamer.networks as networks
 import pickle
 import wandb
@@ -103,7 +103,7 @@ class DebugLogger:
 
 
 class Logger:
-    def __init__(self, logdir, step):
+    def __init__(self, logdir, step , name):
         self._logdir = logdir
         self._last_step = None
         self._last_time = None
@@ -112,7 +112,7 @@ class Logger:
         self._videos = {}
         self.step = step
 
-        name = str(logdir).split('/')[-2] + '_' + str(logdir).split('/')[-1]
+        name = name + '_' + str(logdir).split('/')[-2] + '_' + str(logdir).split('/')[-1]
         # Initialize WandB
         wandb.init(project="failure_prediction", config={"logdir": str(logdir)}, name=name)
 
@@ -435,6 +435,279 @@ def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=Fa
     f.close()
     return  observation_space, action_space, norm_dict, state_dim, action_dim
 
+def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, padding=None):
+    env_name = config.task.split("_", 1)[0]
+    sample_freq = config.sample_freq
+    selected_obs_keys = config.obs_keys
+    if config.multi_task_data:
+        cprint("Using multitask data", color="red", attrs=["bold"])
+        cprint(
+            "Insure that the envs have the same obs_dim and ac_dim",
+            color="red",
+            attrs=["bold"],
+        )
+        # hard-coded for now
+        env_names = ["Lift", "Can", "Square"]
+    else:
+        env_names = [env_name]
+
+    # Initialize extra info to return
+    norm_dict = None
+    state_dim = None
+    action_dim = None
+
+    for env_name_id, env_name in enumerate(env_names):
+       
+        dataset_path, _ = get_real_dataset_path_and_env_meta(
+            env_id=env_name,
+            # type = dataset_type,
+            config = config,
+            done_mode=config.done_mode,
+        )
+       
+        f = h5py.File(dataset_path, "r")
+   
+        demos = list(f["data"].keys())
+        inds = np.argsort([int(elem[5:]) for elem in demos])
+        demos = [demos[i] for i in inds]
+        ## filter out the demos whose length is larger than 1500
+        demos = [demo for demo in demos if f['data'][demo]['actions'].shape[0] <= 1500]
+        
+        # if is_val_set, we don't fill the first num_exp_trajs which are used for training
+        config.num_exp_trajs = (
+            len(demos) if config.num_exp_trajs == -1 else config.num_exp_trajs
+        )
+        if is_val_set:
+            # assert config.num_exp_trajs < len(demos), "Not enough expert data for val"
+            if config.num_exp_trajs >= len(demos):
+                print('not enough expert data for val')
+                burn_in_trajs = 0 if is_val_set else 0 
+            else:
+                burn_in_trajs = config.num_exp_trajs if is_val_set else 0
+        else: 
+            burn_in_trajs = config.num_exp_trajs if is_val_set else 0
+        num_fill_trajs = (
+            min(len(demos), config.num_exp_trajs + config.validation_mse_trajs)
+            if is_val_set
+            else config.num_exp_trajs
+        )
+        # obs_keys = shape_meta["obs"].keys()
+        obs_keys = f['data'][demos[0]]['obs'].keys()    
+        pixel_keys = sorted([key for key in obs_keys if "image" in key and key in selected_obs_keys])
+        # state_keys = sorted([key for key in obs_keys if "image" not in key])
+        state_keys = config.state_keys
+        
+        # Initialize norm_dict if it is None
+        if norm_dict is None:
+            # Read ob_dim and ac_dim from the first datapoint in the first demo
+            first_demo = f["data"][demos[0]]
+            ob_dim = 0
+            for key in state_keys:
+                ob_dim += np.prod(first_demo["obs"][key].shape[1:])
+            ac_dim = first_demo["actions"].shape[1]
+
+            print(f"Initizalizing norm_dict with ob_dim={ob_dim} and ac_dim={ac_dim}")
+            norm_dict = {
+                "ob_max": -np.inf * np.ones(ob_dim, dtype=np.float32),
+                "ob_min": np.inf * np.ones(ob_dim, dtype=np.float32),
+                "ac_max": -np.inf * np.ones(ac_dim, dtype=np.float32),
+                "ac_min": np.inf * np.ones(ac_dim, dtype=np.float32),
+            }
+        origin_shape = list(f["data"][demos[0]]["actions_abs"].shape[1:])
+        # origin_shape[0] -= 5
+        action_space = Box(-1, 1, shape = tuple(origin_shape))
+       
+        # Set state_dim and action_dim
+        if state_dim is None:
+            state_dim = 0
+            for key in state_keys:
+                state_dim += np.prod(first_demo["obs"][key].shape[1:])
+
+        if action_dim is None:
+            ## remove the last base + mode action because it is not used in the policy 
+            ## pos: 3dim, axis_angle: 3dim, gripper: 1dim, base: 4 dim, mode: 1 dim
+            
+            action_dim = first_demo["actions_abs"].shape[1]             
+        obs_space = {}
+        print('pixel_keys', pixel_keys)
+        for key in pixel_keys:
+            obs_space[key] = Box(0, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
+        for key in state_keys:
+            obs_space[key] = Box(-1, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
+        obs_space['is_terminal'] = Discrete(2)
+        obs_space['is_first'] = Discrete(2)
+        obs_space['is_last'] = Discrete(2)
+        obs_space['discount'] = Box(0, 1, shape = (1,))
+        # obs_space['object_state'] = Box(0, 1, shape = f["data"][demos[0]]["obs"]["object"].shape[1:])
+        obs_space['state'] = Box(-1, 1, shape = (state_dim,))
+        # obs_space['privileged_state'] = Box(-1, 1, shape = (3,)) #state_dim + 3
+        observation_space = Dict(obs_space)
+        success_id = 0
+        failure_id = 0
+        for i, demo in tqdm(
+            enumerate(demos),
+            desc="Loading in expert data",
+            ncols=0,
+            leave=False,
+            total=num_fill_trajs,
+        ):
+            if i < burn_in_trajs:
+                continue
+            elif i >= num_fill_trajs:
+                print('last demo index', demos[i])
+                break
+
+            traj = f["data"][demo]
+            label = f["data"][demo].attrs['label']
+            # Concat state keys to create "state" key
+            concat_state = []
+            for t in range(len(traj["obs"][pixel_keys[0]])):
+                curr_obs_state_vec = [traj["obs"][obs_key][t] for obs_key in state_keys]
+                curr_obs_state_vec = np.concatenate(
+                    curr_obs_state_vec, dtype=np.float32
+                )
+                concat_state.append(curr_obs_state_vec)
+
+                # Update norm_dict for the environment
+                norm_dict["ob_max"] = np.maximum(
+                    norm_dict["ob_max"], curr_obs_state_vec
+                )
+                norm_dict["ob_min"] = np.minimum(
+                    norm_dict["ob_min"], curr_obs_state_vec
+                )
+            # breakpoint()
+            # Stack Observations for State and Pixel Keys
+            stacked_obs = {}
+            # stacked_obs["state"] = get_obs_stacked(concat_state, config.obs_horizon)
+            # for key in pixel_keys:
+            #     stacked_obs[key] = get_obs_stacked(traj["obs"][key], config.obs_horizon)
+
+
+            # Stack Actions
+            # stacked_acts = get_act_stacked(traj["actions"], config.pred_horizon)
+            # stacked_acts = np.concatenate([np.zeros_like(stacked_acts[:1]), stacked_acts], axis=0)
+
+            stacked_obs["state"] = concat_state
+            for key in pixel_keys:
+                stacked_obs[key] = traj["obs"][key]
+            # stacked_acts = np.concatenate([np.zeros_like(traj['actions'][:1]), traj['actions']], axis=0)
+            
+            # Update norm_dict for the environment
+            acts_np_array = np.array(traj["actions_abs"])
+            norm_dict["ac_max"] = np.maximum(
+                norm_dict["ac_max"], np.max(acts_np_array, axis=0)
+            )
+            norm_dict["ac_min"] = np.minimum(
+                norm_dict["ac_min"], np.min(acts_np_array, axis=0)
+            )
+            # transition = defaultdict(np.array)
+            length = len(traj["obs"][pixel_keys[0]])
+            if not is_val_set or label == 0: #label == 0:
+                for ind_step in range(2):
+                    cache[f'exp_traj_{success_id+ind_step}']  = {}
+                    for key in pixel_keys:
+                        cache[f'exp_traj_{success_id+ind_step}'][key] = np.array(traj["obs"][key])[ind_step::sample_freq]
+                    cache[f'exp_traj_{success_id+ind_step}']['state'] = stacked_obs["state"][ind_step::sample_freq]
+        
+                    cache[f'exp_traj_{success_id+ind_step}']['is_first'] = np.array([1] + [0]*(length-1), dtype=np.bool_)[ind_step::sample_freq]
+                    cache[f'exp_traj_{success_id+ind_step}']['is_last'] = np.array([0] * length, dtype=np.bool_)[ind_step::sample_freq]
+                    cache[f'exp_traj_{success_id+ind_step}']['is_terminal'] = np.array([0] * length, dtype=np.bool_)[ind_step::sample_freq]
+                    subsample_actions = np.array(traj["actions_abs"])[sample_freq -1+ind_step::sample_freq]
+                    if (length+ind_step) % sample_freq != 0:
+                        ## add the last action to the end of the list
+                        subsample_actions = np.concatenate([subsample_actions, np.array(traj["actions_abs"][-1:])], axis=0)
+                    cache[f'exp_traj_{success_id+ind_step}']['action'] = subsample_actions
+                    cache[f'exp_traj_{success_id+ind_step}']['discount'] = np.array([1]*length, dtype=np.float32)[ind_step::sample_freq]
+                ## add the original data
+                
+                # cache[f'exp_traj_{success_id+2}']  = {}
+                # for key in pixel_keys:
+                #     cache[f'exp_traj_{success_id+2}'][key] = np.array(traj["obs"][key])
+                # cache[f'exp_traj_{success_id+2}']['state'] = stacked_obs["state"]
+    
+                # cache[f'exp_traj_{success_id+2}']['is_first'] = np.array([1] + [0]*(length-1), dtype=np.bool_)
+                # cache[f'exp_traj_{success_id+2}']['is_last'] = np.array([0] * length, dtype=np.bool_)
+                # cache[f'exp_traj_{success_id+2}']['is_terminal'] = np.array([0] * length, dtype=np.bool_)
+                # subsample_actions = np.array(traj["actions_abs"])
+                # cache[f'exp_traj_{success_id+2}']['action'] = subsample_actions
+                # cache[f'exp_traj_{success_id+2}']['discount'] = np.array([1]*length, dtype=np.float32)
+                success_id += 2
+            else: 
+                # if is_val_set:
+                    # breakpoint()
+                for ind_step in range(2):
+                    cache2[f'exp_traj_{failure_id+ind_step}']  = {}
+                    for key in pixel_keys:
+                        cache2[f'exp_traj_{failure_id+ind_step}'][key] = np.array(traj["obs"][key])[ind_step::sample_freq]
+                    # cache[f'exp_traj_{i}']['obs'] = stacked_obs
+                    cache2[f'exp_traj_{failure_id+ind_step}']['state'] = stacked_obs["state"][ind_step::sample_freq]
+                    # cache[f'exp_traj_{i}']['object_state'] = np.array(traj["obs"]["object"])
+                    # cache[f'exp_traj_{i}']['privileged_state'] = np.array(traj["obs"]["object"][:, :3])#np.concatenate(
+                        # [traj["obs"]["object"][:, :3], concat_state],axis=1, dtype=np.float32,
+                    # )
+                    cache2[f'exp_traj_{failure_id+ind_step}']['is_first'] = np.array([1] + [0]*(length-1), dtype=np.bool_)[ind_step::sample_freq]
+                    cache2[f'exp_traj_{failure_id+ind_step}']['is_last'] = np.array([0]*length, dtype=np.bool_)[ind_step::sample_freq]
+                    cache2[f'exp_traj_{failure_id+ind_step}']['is_terminal'] = np.array([0]*length, dtype=np.bool_)[ind_step::sample_freq]
+                    subsample_actions = np.array(traj["actions_abs"])[sample_freq -1 + ind_step::sample_freq]
+                    if (length + ind_step) % sample_freq != 0:
+                        ## add the last action to the end of the list
+                        subsample_actions = np.concatenate([subsample_actions, np.array(traj["actions_abs"][-1:])], axis=0)
+                    cache2[f'exp_traj_{failure_id+ind_step}']['action'] = subsample_actions
+                    cache2[f'exp_traj_{failure_id+ind_step}']['discount'] = np.array([1]*length, dtype=np.float32)[ind_step::sample_freq]
+                # cache2[f'exp_traj_{failure_id+2}']  = {}
+                # for key in pixel_keys:
+                #     cache2[f'exp_traj_{failure_id+2}'][key] = np.array(traj["obs"][key])
+                # # cache[f'exp_traj_{i}']['obs'] = stacked_obs
+                # cache2[f'exp_traj_{failure_id+2}']['state'] = stacked_obs["state"]
+              
+                # cache2[f'exp_traj_{failure_id+2}']['is_first'] = np.array([1] + [0]*(length-1), dtype=np.bool_)
+                # cache2[f'exp_traj_{failure_id+2}']['is_last'] = np.array([0]*length, dtype=np.bool_)
+                # cache2[f'exp_traj_{failure_id+2}']['is_terminal'] = np.array([0]*length, dtype=np.bool_)
+                # subsample_actions = np.array(traj["actions_abs"])
+                # cache2[f'exp_traj_{failure_id+2}']['action'] = subsample_actions
+                # cache2[f'exp_traj_{failure_id+2}']['discount'] = np.array([1]*length, dtype=np.float32)
+                failure_id += 2
+            # Fill all the transitions in the cache
+            
+            # for t in range(length):
+            #     transition = defaultdict(np.array)
+            #     for obs_key in pixel_keys:
+            #         transition[obs_key] = stacked_obs[obs_key][t]
+
+            #     transition["state"] = stacked_obs["state"][t]
+
+            #     transition["privileged_state"] = np.concatenate(
+            #         [traj["obs"]["object"][t][:3], concat_state[t]], dtype=np.float32,
+            #     )
+            #     transition["object_state"] = traj["obs"]["object"][t]
+                
+            #     transition["is_first"] = np.array(t == 0, dtype=np.bool_)
+            #     transition["action"] = stacked_acts[t]
+            #     transition["discount"] = np.array(1, dtype=np.float32)
+            #     if t == length -1:
+            #         transition["is_last"] = np.array(True, dtype=np.bool_)
+            #         transition["is_terminal"] = np.array(True, dtype=np.bool_)
+                    
+            #     add_to_cache(cache, f"exp_traj_{i}", transition)
+
+               
+                # transitions in real env also have 'logprob' key, but doesn't seem to ever be used
+        print('success_num', success_id)
+        print('failure_num', failure_id)
+        if not is_val_set:
+            cprint(
+                f"Loading expert buffer with {config.num_exp_trajs} trajectories from {dataset_path}",
+                color="magenta",
+                attrs=["bold"],
+            )
+        else:
+            cprint(
+                f"Loading validation buffer with {config.validation_mse_trajs} trajectories from {dataset_path}",
+                color="magenta",
+                attrs=["bold"],
+            )
+    f.close()
+    return  observation_space, action_space, norm_dict, state_dim, action_dim
 def fill_expert_dataset(config, cache, is_val_set=False):
     if '_' in config.task:
         env_name = config.task.split("_", 1)[1]
@@ -1155,14 +1428,20 @@ def sample_episodes(episodes, length, seed=0):
             [len(next(iter(episode.values()))) for episode in episodes.values()]
         )
         p = p / np.sum(p)
+        # num_ep = 0
+        # episodes_keys = list(episodes.keys())
+        # key = next(iter(episodes_keys))
         while size < length:
             episode = np_random.choice(list(episodes.values()), p=p)
+            # episode = episodes[episodes_keys[num_ep]]
+            # num_ep += 1
             total = len(next(iter(episode.values())))
             # make sure at least one transition included
             if total < 2:
                 continue
             if not ret:
                 index = int(np_random.randint(0, total - 1))
+                # index = 0
                 ret = {
                     k: v[index : min(index + length, total)].copy()
                     for k, v in episode.items()

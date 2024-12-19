@@ -426,31 +426,31 @@ class Dreamer(nn.Module):
                 obs_mlp.train()
         return obs_loss.item()
 
-    def get_latent(self, xs, ys, thetas, imgs, lx_mlp):
-        states = np.expand_dims(np.expand_dims(thetas,1),1)
-        imgs = np.expand_dims(imgs, 1)
-        dummy_acs = np.zeros((np.shape(xs)[0], 1, 3))
-        rand_idx = 1 #np.random.randint(0, 3, np.shape(xs)[0])
-        dummy_acs[np.arange(np.shape(xs)[0]), :, rand_idx] = 1
-        firsts = np.ones((np.shape(xs)[0], 1))
-        lasts = np.zeros((np.shape(xs)[0], 1))
+    # def get_latent(self, xs, ys, thetas, imgs, lx_mlp):
+    #     states = np.expand_dims(np.expand_dims(thetas,1),1)
+    #     imgs = np.expand_dims(imgs, 1)
+    #     dummy_acs = np.zeros((np.shape(xs)[0], 1, 3))
+    #     rand_idx = 1 #np.random.randint(0, 3, np.shape(xs)[0])
+    #     dummy_acs[np.arange(np.shape(xs)[0]), :, rand_idx] = 1
+    #     firsts = np.ones((np.shape(xs)[0], 1))
+    #     lasts = np.zeros((np.shape(xs)[0], 1))
         
-        cos = np.cos(states)
-        sin = np.sin(states)
-        states = np.concatenate([cos, sin], axis=-1)
-        data = {'obs_state': states, 'image': imgs, 'action': dummy_acs, 'is_first': firsts, 'is_terminal': lasts}
+    #     cos = np.cos(states)
+    #     sin = np.sin(states)
+    #     states = np.concatenate([cos, sin], axis=-1)
+    #     data = {'obs_state': states, 'image': imgs, 'action': dummy_acs, 'is_first': firsts, 'is_terminal': lasts}
 
-        data = self._wm.preprocess(data)
-        embed = self._wm.encoder(data)
+    #     data = self._wm.preprocess(data)
+    #     embed = self._wm.encoder(data)
 
-        post, prior = self._wm.dynamics.observe(
-            embed, data["action"], data["is_first"]
-            )
-        feat = self._wm.dynamics.get_feat(post).detach()
-        with torch.no_grad():  # Disable gradient calculation
-            g_x = lx_mlp(feat).detach().cpu().numpy().squeeze()
-        feat = self._wm.dynamics.get_feat(post).detach().cpu().numpy().squeeze()
-        return g_x, feat, post
+    #     post, prior = self._wm.dynamics.observe(
+    #         embed, data["action"], data["is_first"]
+    #         )
+    #     feat = self._wm.dynamics.get_feat(post).detach()
+    #     with torch.no_grad():  # Disable gradient calculation
+    #         g_x = lx_mlp(feat).detach().cpu().numpy().squeeze()
+    #     feat = self._wm.dynamics.get_feat(post).detach().cpu().numpy().squeeze()
+    #     return g_x, feat, post
     def capture_image(self, state=None):
         """Captures an image of the current state of the environment."""
         # For simplicity, we create a blank image. In practice, this should render the environment.
@@ -620,18 +620,25 @@ class Dreamer(nn.Module):
                 # embeddings.append(last_feat)
         return embeddings[0], embeddings[1]
     
-    def get_latent(self, data, mode='all'):
+    def get_latent(self, data, mode='all', imagined_steps = 0, total_steps = 1):
         self._wm.dynamics.sample = False
         data = self._wm.preprocess(data)
         with torch.cuda.amp.autocast(self._wm._use_amp):
             embed = self._wm.encoder(data)
             post, prior = self._wm.dynamics.observe(embed, data["action"], data["is_first"])
             if mode == 'all':
-                feat = self._wm.dynamics.get_feat(post)
+                history_feat = self._wm.dynamics.get_feat(post)
             elif mode == 'z':
-                feat = self._wm.dynamics.get_z(post)
+                history_feat = self._wm.dynamics.get_z(post)
             else: 
                 raise NotImplementedError
+            init = {k: v[:, -1] for k, v in post.items()}
+            prior = self._wm.dynamics.imagine_with_action(data["action"], init)
+            if mode == 'all':
+                imagined_feat = self._wm.dynamics.get_feat(prior)[:, :imagined_steps]
+            elif mode == 'z':
+                imagined_feat = self._wm.dynamics.get_z(prior)[:, :imagined_steps]
+        feat = torch.cat([history_feat, imagined_feat], dim=1)[:,:total_steps]
         return feat
                     
                     
