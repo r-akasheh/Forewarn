@@ -17,6 +17,8 @@ HORIZONS = {
     "dubins": 100,
     'PnPCounterToSink': 2000,
     'GraspCup': 200,
+    'GraspBag':200,
+    'GraspFork': 200,
 }
 
 CORNELL_CLUSTER_ROBOMIMIC_DATASET_DIR = Path(

@@ -4,6 +4,9 @@ wandb/*
 */__pycache__/*
 networks/__pycache__/*
 *.gif
+*.png
+scripts/logs/*
+scripts/wandb/*
 *egg-info*
 *pyc*
 *vscode*

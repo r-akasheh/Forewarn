@@ -34,6 +34,7 @@ def main():
     #     cv2.waitKey(0)
     #     cv2.imwrite(f'camera_rs_{num_file}.png',rs_img_cv2)
     #     cv2.imwrite(f'camera_zed_{num_file}.png',zed_img_cv2)
+    labels = []
     files = os.listdir(demo_path)
     files.sort()
     for file in files:
@@ -43,6 +44,8 @@ def main():
                 traj = pkl.load(f)[0]
         else: 
             continue
+        # if len(labels) > 1:
+        #     break
           
         
 
@@ -75,7 +78,7 @@ def main():
         action_count = 0
         new_traj_list = []
         print("Number of actions: ", num_actions)
-        for i in range(0, num_actions-15):
+        for i in range(0, num_actions):
             # print("\nAction: ", i)
             start_time = time.time()
             # breakpoint()
@@ -85,8 +88,9 @@ def main():
             # if i % 2 == 0:
                 # continue
             # total_action = [traj[i][1][:7], traj[i][1][7]]
+            print('action number', i)
             action_count += 1
-            if vis_img and i in np.linspace(0, 64, 4, dtype=int):
+            if vis_img: #and i in np.linspace(0, 64, 4, dtype=int):
                 rs_img = traj[i][0]['cam_rs'][0]
                 ## convert color for cv2
                 rs_img_cv2 = cv2.cvtColor(rs_img, cv2.COLOR_RGB2BGR)
@@ -95,6 +99,24 @@ def main():
                 cv2.imshow(f'rs_{file}',rs_img_cv2)
                 cv2.imshow(f'zed_{file}',zed_img_cv2)
                 cv2.waitKey(0)
+        key = input('press enter to continue')
+        ## remove the space in key
+        key = key.replace(' ', '')
+        print('key', key)
+        
+        # key = cv2.waitKey(0)
+        # print('key', key)
+        # Map key inputs to labels
+        if key in ['0', '1', '2', '3']:#[ord('0'), ord('1'), ord('2'), ord('3')]:
+            # new_label = int(chr(key))
+            new_label = int(key)
+            print(f"Updated label for Demo {file} to {new_label}.")
+        else:
+            print("Invalid input. Label not updated.")
+        labels.append(new_label)
+        
+            # new_label = label
+        
                 # print(traj[i][1]['action'])
                 # cv2.imwrite(f'camera_rs_{i}.png',rs_img_cv2)
                 # cv2.imwrite(f'camera_zed_{i}.png',zed_img_cv2)
@@ -112,6 +134,8 @@ def main():
             # print("ROBOT STATUS: ", env.check_status())
         print("Replay finished")
         cv2.destroyAllWindows()
+    for i, label in enumerate(labels):
+        print(f"{i}, {label}")
     # save new trajectory
     # the original one is real_data/exp_name/type/traj_xxxx.pkl and save the trajector to the new one is real_data/exp_name_cut/type/traj_xxxx.pkl
     # new_traj_path = demo_path.parent.parent.parent/(demo_path.parent.parent.stem +"_cut") / demo_path.parent.stem / demo_path.name

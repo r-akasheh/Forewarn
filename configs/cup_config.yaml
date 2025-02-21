@@ -47,7 +47,7 @@ defaults:
 
   exp_name: 'wm_real_cup'
   image_size: 64 #64
-  sample_freq: 2
+  sample_freq: 1
   shape_rewards: True
   shift_rewards: False
   multi_task_data: False
@@ -63,6 +63,8 @@ defaults:
                     'state', # 8
   ]
   action_space: [8]
+  action_type: 'delta'
+  action_norm: true
   observation_space: {
     'cam_wrist_view_image': [64, 64,3],
     'cam_front_view_image': [64, 64,3],
@@ -77,7 +79,7 @@ defaults:
   # Pretraining
   pretrain_bc_loss_only: True
   pretrain_separately: False
-  pretrain_joint_steps: 100000 #40000
+  pretrain_joint_steps: 150000 #40000
   pretrain_annealing: null
   pretrain_actor_steps: 0
   pretrain_loss: 'ce'  # 'mse' or 'ce'
@@ -191,7 +193,7 @@ defaults:
   initial: 'learned'
 
   # Training
-  wandb_name: 'wm_real_cup_bs_16_bl_64_eps_300_sample_freq_2_with_original_data'
+  wandb_name: 'wm_real_cup_bs_16_bl_64_eps_300_sample_freq_1_with_only_policy_data_normalization_delta_action'
   batch_size: 16 #32
   batch_length: 64 #64 #16 #32
   train_ratio: 1024

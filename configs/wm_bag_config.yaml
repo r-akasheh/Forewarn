@@ -29,7 +29,7 @@ defaults:
   # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1218/220106/pretrain_joint.pt #null
   # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1218/220748/pretrain_joint.pt #null
   # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1226/163754/pretrain_joint.pt #null
-  from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1229/222731/pretrain_joint.pt #null
+  from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/0106/234547/pretrain_joint_150000.pt #null
 
 
 

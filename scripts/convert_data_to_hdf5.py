@@ -59,6 +59,9 @@ def convert_pickle_to_hdf5(input_dir, output_file):
             if os.path.isdir(folder_path):
                 mode_dict = {}
             mode_file_path = os.path.join(folder_path, 'mode.txt')
+            if not os.path.exists(mode_file_path):
+                print(folder, 'does not have mode file')
+                # continue
             if os.path.exists(mode_file_path):
                 with open(mode_file_path, 'r') as mode_file:
                     for line in mode_file:
@@ -85,7 +88,9 @@ def convert_pickle_to_hdf5(input_dir, output_file):
                 file_id = str(int(filename.split('_')[1].split('.')[0]))
                 demo_group.attrs['mode'] = mode_dict.get(file_id, 'unknown')
                 mode = mode_dict.get(file_id, 'unknown')
-                demo_group.attrs['label'] = 0 if mode == '0' else 1
+                print('mode', mode)
+                if mode != 'unknown':
+                    demo_group.attrs['label'] = int(mode) 
                 if 'grasp' in input_dir:
                     demo_group.attrs['type'] = 'demonstration'
                 elif 'preference' in input_dir:

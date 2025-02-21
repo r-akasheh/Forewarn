@@ -44,7 +44,7 @@ defaults:
   ignore_base_policy: False # if True, ignore base policy in residuals
   augment_images: False
   seed_in_batches: True
-  validation_mse_trajs: 36 #27 # 20 #10
+  validation_mse_trajs: 44 #36 #27 # 20 #10
 
   # Mixed data pretraining
   pretrain_on_random: False
@@ -95,29 +95,31 @@ defaults:
   recon_pretrain: True # If true, pretrain decoder with reconstruction loss
   dropout_recurrent_prob: 0
   initial_joint_train_steps: 0  # Number of steps to train model on expert+random data before joint training
-
+  
   ## classifier configs
-  classifier_epoch: 50 #200
-  classifier_batch_size: 32
-  classifier_batch_length: 1500 #1500
-  classifier_mode: 'split' ## 'whole' or 'split'
+  classifier_epoch: 30 #200
+  classifier_batch_size: 32 #20
+  classifier_start_index: 35
+  classifier_batch_length: 99 ## 35 + 64
+  classifier_mode: 'split' #'split_varied' ## 'whole' or 'split', 'split_varied'
   classifier_latent_mode: 'all' ## 'all' or 'z'
-  classifier_padding_mode: 'last' ## 'zeros' or 'last'
+  classifier_padding_mode: 'last'
+  classifier_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/0107/170121/classifier_251.pt # 107 # 539  #1016/160332/classifier_191.pt #1005/005036/classifier.pt #null
   transformer:
-    enabled: True
-    supervise_all_steps: False
-    pred_future_acs: False 
-    context_length: 1500
-    causal:  True
-    num_layers: 1 # #  6
-    embed_dim: 64 # 64 #256 #512
-    num_heads: 1  # 4 #8
-    attn_dropout: 0.05 #0.1 
-    emb_dropout: 0.05 #0.1
-    block_output_dropout: 0.05 #0.1
-    activation: "gelu"
-    nn_parameter_for_timesteps: False
-    sinusoidal_embedding: True
+    {enabled: True, 
+    supervise_all_steps: False,
+    pred_future_acs: False, 
+    causal:  True,
+    num_layers: 1, # #  6
+    embed_dim: 64, # 64 #256 #512
+    num_heads: 1, # 4 #8
+    attn_dropout: 0.05, #0.1 
+    emb_dropout: 0.05, #0.1
+    block_output_dropout: 0.05, #0.1
+    activation: "gelu",
+    context_length: 16,
+    nn_parameter_for_timesteps: False,
+    sinusoidal_embedding: True}
   # Hybrid Training
   hybrid_training: True
   pretrain_reward_val: null
@@ -158,6 +160,7 @@ defaults:
 
   # Environment
   task: 'GraspCup'
+  action_type : 'abs'
   size: [128, 128]
   envs: 1
   action_repeat: 1
@@ -198,9 +201,9 @@ defaults:
   weight_decay: 0.0
   unimix_ratio: 0.01
   initial: 'learned'
-  sample_freq: 2
+  sample_freq: 1
   # Training
-  wandb_name: 'wm_real_cup_bs_16_bl_64_eps_300'
+  wandb_name: 'wm_real_cup_binary_failure_classifier'
   batch_size: 16 #32
   batch_length: 64 #64 #16 #32
   train_ratio: 1024

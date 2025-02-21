@@ -19,6 +19,7 @@ from robomimic.config.base_config import Config
 import time
 from tqdm import trange
 from collections import defaultdict
+import json
 class ObservationDecoder(Module):
     """
     Module that can generate observation outputs by modality. Inputs are assumed
@@ -1060,6 +1061,7 @@ class ClassifierTrainer:
             return num_steps * epoch + num_steps -1
         else: 
             ## evaluate sample one batch from the validation set
+            # self.evaluate_whole_dataset(data_loader=data_loader, epoch = epoch, classifier_mode = classifier_mode)
             t = time.time()
             batch = next(data_loader_iter)
             timing_stats["Data_Loading"].append(time.time() - t)
@@ -1090,6 +1092,549 @@ class ClassifierTrainer:
             for key in timing_stats.keys():
                 self.logger.scalar(f"timing/{key}", np.mean(timing_stats[key]))
             self.logger.write(step=num_steps)
+            return None
+            
+            
+
+class ClassifierLatentTrainer:
+    def __init__(self, wm, logger, config, device, num_training_steps, context_length=16):
+        self.wm = wm
+        self.logger = logger
+        self.device = device
+        self.chunk_size = config.batch_length
+        self.nets = nn.ModuleDict()
+        self.nets['classifier'] = PredTransformer(
+            embed_dim = config.dyn_stoch + config.dyn_deter, context_length=context_length, algo_config = config.transformer)
+        self.context_length = context_length
+        self.padding_mode = config.classifier_padding_mode
+        self.nets = self.nets.float().to(self.device)
+        self.latent_mode = config.classifier_latent_mode
+        self.optim_params = {}
+        self.optimizers = {}
+        self.lr_schedulers = {}
+        self._loss_name = 'pred_loss'
+        self.optim_params['classifier'] = dict(optimizer_type = "adam", 
+                                 learning_rate = dict(
+                                     initial = 0.0001,
+                                     decay_factor = 0.1,
+                                     epoch_schedule = [],
+                                     scheduler_type = 'constant',
+                                     ),
+                                 regularization = dict(
+                                     L2 = 0.0
+                                 ))
+        self.max_grad_norm = 100.0
+        self.optimizers['classifier'] = TorchUtils.optimizer_from_optim_params(
+                            net_optim_params=self.optim_params['classifier'],
+                            net=self.nets['classifier'])
+                       
+        
+        self.lr_schedulers['classifier'] =  TorchUtils.lr_scheduler_from_optim_params(
+                            net_optim_params=self.optim_params['classifier'],
+                            net=self.nets['classifier'],
+                            optimizer=self.optimizers['classifier'],
+                            #num_training_steps=num_training_steps,
+                        )
+                        
+        
+    def confusion_matrix(self, y_true, y_pred, num_classes):
+        conf_matrix = torch.zeros(num_classes, num_classes, dtype=torch.int64)
+        for t, p in zip(y_true.view(-1), y_pred.view(-1)):
+            conf_matrix[t.long(), p.long()] += 1
+        conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1, keepdims=True)
+        conf_matrix_no_nan = torch.where(torch.isnan(conf_matrix_norm), torch.zeros_like(conf_matrix_norm), conf_matrix_norm)
+        return torch.diag(conf_matrix_no_nan), conf_matrix_no_nan
+
+    def load_batch_labels(self, batch):
+        ## 0 and 3 for 1, 1 and 2 for 0  
+        gt_labels = torch.Tensor(batch['label'][:, 0]).to(self.device).long()
+        gt_labels = torch.where((gt_labels == 0) | (gt_labels == 3), 1, 
+                                torch.where((gt_labels == 1) | (gt_labels == 2), 0, gt_labels))
+
+        ## 0 and 3 for 0, 1 and 2 for 1
+        
+        # if gt_labels == 1:
+            # gt_labels = torch.zeros_like(gt_labels)
+        return gt_labels
+    
+    
+    def process_batch(self, batch_trajectories, mode='whole'):
+        # batch_size = len(batch_trajectories)
+        
+        # Get the real lengths of each trajectory before padding
+        # real_lengths = torch.tensor([trajectory.size(0) for trajectory in batch_trajectories])
+        # real_lengths = torch.Tensor(batch_trajectories['actual_length'][:, 0])
+        batch_size = batch_trajectories['actual_length'].shape[0]
+        # shape = batch_trajectories['actual_length'].shape
+        actual_lengths = torch.ones((batch_size,))
+        actual_lengths[:] = 64
+        actual_lengths = actual_lengths.to(self.device)
+        assert batch_trajectories['action'].shape[1] == 64, batch_trajectories['actions'].shape
+        # Pad all trajectories to the maximum sequence length in the batch
+        # max_len = self.context_length
+        # embed_chunks = []
+        
+        latents = self.wm.get_latent(batch_trajectories, imagined_steps = 63, sample_size=16, actual_lengths = actual_lengths)
+        ## downsample to 16 
+        # downsampled_latents = latents[:, ::16, :]
+        # if mode == 'whole':
+        #     for i in range(batch_size):
+        #         chunked_inputs_dict = {
+        #             key: padded_inputs[i][None,:]  # Shape: (1, T, D)
+        #             for key, padded_inputs in batch_trajectories.items()
+        #         }
+        #         latent_chunk = self.wm.get_latent(chunked_inputs_dict)
+        #         embed_chunks.append(latent_chunk)
+        #     batch_embed = torch.cat(embed_chunks, dim=0)
+        # elif mode == 'split':
+        #     # Process the sequence in chunks of size chunk_size
+        #     for start_idx in range(0, max_len, self.chunk_size):
+        #         end_idx = min(start_idx + self.chunk_size, max_len)
+                
+        #         # Create a chunked dictionary that will be passed to the world model
+        #         # t = time.time()
+        #         chunked_inputs_dict = {
+        #             key: padded_inputs[:, start_idx:end_idx]  # Shape: (batch_size, chunk_size, D)
+        #             for key, padded_inputs in batch_trajectories.items()
+        #         }
+        #         # print('Time taken for chunked_inputs_dict', time.time()-t)
+        #         # t = time.time()
+        #         # Process the chunked dictionary through the world model
+        #         latent_chunk = self.wm.get_latent(chunked_inputs_dict, mode = self.latent_mode)
+        #         # print('Time taken for get_latent', time.time()-t)
+        #         embed_chunks.append(latent_chunk)
+        #     ## Concatenate the embeddings from all chunks at the first dim
+        #     batch_embed = torch.cat(embed_chunks, dim=1)
+        # elif mode == 'split_varied':
+        #     ## test cuttng off the success trajectories
+        #     # real_lengths = torch.Tensor(batch_trajectories['actual_length'][:, 0] - 200)
+        #     print('real_length', real_lengths)
+        #     # real_lengths = real_lengths - 300
+        #     # Process the sequence in chunks of size chunk_size
+        #     for start_idx in range(0, real_lengths.long(), self.chunk_size):
+        #         end_idx = min(start_idx + self.chunk_size, real_lengths.long())
+                
+        #         # Create a chunked dictionary that will be passed to the world model
+        #         # t = time.time()
+        #         chunked_inputs_dict = {
+        #             key: padded_inputs[:, start_idx:end_idx]  # Shape: (batch_size, chunk_size, D)
+        #             for key, padded_inputs in batch_trajectories.items()
+        #         }
+        #         # print('Time taken for chunked_inputs_dict', time.time()-t)
+        #         # t = time.time()
+        #         # Process the chunked dictionary through the world model
+        #         latent_chunk = self.wm.get_latent(chunked_inputs_dict, mode = self.latent_mode)
+        #         # print('Time taken for get_latent', time.time()-t)
+        #         embed_chunks.append(latent_chunk)
+        #     ## Concatenate the embeddings from all chunks at the first dim
+        #     batch_embed = torch.cat(embed_chunks, dim=1)
+        #     return batch_embed, None, real_lengths
+        # else: 
+        #     raise NotImplementedError
+    
+
+        # Create the mask (True for padded positions, False for real positions)
+        # batch_mask = torch.arange(max_len).expand(batch_size, max_len) >= real_lengths.unsqueeze(1)
+        ## 1 for all positions as batched_embed
+        batch_mask = torch.ones_like(latents)
+        assert latents.shape[1] == 16, latents.shape
+        batch_mask = batch_mask.to(self.device)
+        batch_embed = latents
+
+        # Pass the concatenated embeddings through the transformer with the mask
+        # output = transformer(embeddings, mask=mask)
+        if self.padding_mode == 'last':
+            return batch_embed, None
+        return batch_embed, batch_mask
+        
+    # # Function to sample batches and process them through the world model and transformer
+    # def process_batch(self, batch_trajectories, chunk_size=16):
+    #     # batch_size = len(batch_trajectories)
+        
+    #     # Get the real lengths of each trajectory before padding
+    #     # real_lengths = torch.tensor([trajectory.size(0) for trajectory in batch_trajectories])
+    #     real_lengths = batch_trajectories['actual_length'][:, 0]
+    #     batch_size = batch_trajectories['actual_length'].shape[0]
+
+    #     # Pad all trajectories to the maximum sequence length in the batch
+    #     max_len = self.context_length #real_lengths.max().item()  # Get the maximum length in the batch
+    #     # padded_trajectories = nn.utils.rnn.pad_sequence(batch_trajectories, batch_first=True)
+
+    #     # Reshape the padded trajectories into chunks of size chunk_size
+    #     num_chunks = (max_len + chunk_size - 1) // chunk_size  # Calculate the number of chunks needed
+    #     # padded_trajectories = batch_trajectories.unfold(1, chunk_size, chunk_size)  # Shape: [batch_size, num_chunks, chunk_size, obs_dim]
+
+    #     # Flatten so we can pass all chunks at once to the world model
+    #     # flat_chunks = padded_trajectories.reshape(-1, chunk_size, padded_trajectories.size(-1))  # Shape: [batch_size * num_chunks, chunk_size, obs_dim]
+    #     flat_chunks = batch_trajectories
+    #     # Process all chunks at once through the world model
+    #     all_chunk_embeddings = self.wm.get_latent(flat_chunks)  # Shape: [batch_size * num_chunks, chunk_size, latent_dim]
+
+    #     # Reshape back into the original batch format: [batch_size, num_chunks, chunk_size, latent_dim]
+    #     all_chunk_embeddings = all_chunk_embeddings.view(batch_size, num_chunks, chunk_size, -1)
+
+    #     # Now flatten the chunks along the sequence dimension: [batch_size, total_seq_len, latent_dim]
+    #     total_seq_len = num_chunks * chunk_size
+    #     batch_embeddings = all_chunk_embeddings.view(batch_size, total_seq_len, -1)
+
+    #     # Create the mask (True for padded positions, False for real positions)
+    #     batch_mask = torch.arange(total_seq_len).expand(batch_size, total_seq_len) >= real_lengths.unsqueeze(1)
+
+    #     # Pass the concatenated embeddings through the transformer with the mask
+    #     # output = transformer(embeddings, mask=mask)
+        
+    #     return batch_embeddings, batch_mask
+
+    def _compute_losses(self, predictions):
+        """
+        Internal helper function for BC_Transformer_GMM algo class. Compute losses based on
+        network outputs in @predictions dict, using reference labels in @batch.
+        Args:
+            predictions (dict): dictionary containing network outputs, from @_forward_training
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+        Returns:
+            losses (dict): dictionary of losses computed over the batch
+        """
+        loss_dict = OrderedDict()
+        for key in predictions:
+            if "loss" in key:
+                loss_dict[key] = predictions[key]
+                
+        return loss_dict
+
+    def forward_training(self, embed, mask, gt_labels):
+        # embed = self.wm.get_latent(batch)
+        # embed, mask = self.process_batch(batch)
+        embed = TensorUtils.detach(embed)
+        if mask is not None:
+            embed_mask =  TensorUtils.detach(mask)
+        else: 
+            embed_mask = None
+        pred_logits = self.nets['classifier'].forward(embed = embed, key_padding_mask=embed_mask ) 
+        
+        # batch_size = embed.size(0)  
+        ## option 1 create sparse labels for each sequence at the last step
+        ## get the last step logits
+        pred_logits_traj = pred_logits[:, -1, :]
+        # pred_logits_traj = pred_logits[torch.arange(batch_size), real_lengths.long()-1, :]
+        ## option 2 create dense labels for each sequence from the first step to the real length step
+        # pred_logits_traj = torch.concat(pred_logits[i, : real_lengths[i].long(), :] for i in range(batch_size))
+        # breakpoint()
+        # pred_reward_for_loss = torch.permute(pred_reward, (0,2,1))
+        # reward_labels_for_loss = reward_labels
+        
+        pred_loss_func = nn.CrossEntropyLoss(reduction="none")
+        pred_loss = pred_loss_func(pred_logits_traj, gt_labels).mean()
+        
+        pred_classes = torch.argmax(pred_logits_traj, dim=-1)
+        overall_acc = (pred_classes == gt_labels).float().mean()
+        
+        with np.errstate(divide='ignore', invalid='ignore'):
+            class_acc, matrix = self.confusion_matrix(y_true=gt_labels, y_pred=pred_classes, num_classes=2)
+        info = {'pred_loss': pred_loss, 'overall_acc': overall_acc, 'y_true': gt_labels, 'y_pred': pred_classes,
+                "class_acc_fail": class_acc[0], 'class_acc_success': class_acc[1], 
+                'class_acc_fnr':matrix[1,0], 'class_acc_fpr':matrix[0,1]}
+        # print('info', info)
+        return info
+    
+    def train_on_batch(self, batch, mask, gt_labels, validate = False):
+        """
+        Internal helper function for BC algo class. Perform backpropagation on the
+        loss tensors in @losses to update networks.
+
+        Args:
+            losses (dict): dictionary of losses computed over the batch, from @_compute_losses
+        """
+        info = OrderedDict()  
+        with TorchUtils.maybe_no_grad(no_grad=validate):
+            
+
+            predictions = self.forward_training(batch, mask=mask, gt_labels=gt_labels) 
+                
+            losses = self._compute_losses(predictions)
+
+            info["predictions"] = TensorUtils.detach(predictions)
+            info["losses"] = TensorUtils.detach(losses)
+
+            if not validate:
+                    
+                # gradient step
+                
+                policy_grad_norms = TorchUtils.backprop_for_loss(
+                    net=self.nets["classifier"],
+                    optim=self.optimizers["classifier"],
+                    loss=losses[self._loss_name],
+                    max_grad_norm=self.max_grad_norm,
+                )
+                info["policy_grad_norms"] = policy_grad_norms
+
+                # step through optimizers
+                for k in self.lr_schedulers:
+                    if self.lr_schedulers[k] is not None:
+                        self.lr_schedulers[k].step()
+        return info
+
+    def evaluate_whole_dataset_in_training(self, data_loader, epoch = None, classifier_mode = 'whole'):
+        self.nets['classifier'].eval()
+
+        # step_log_all = []
+        # timing_stats = dict(Data_Loading=[], Process_Batch=[], Train_Batch=[])
+        # start_time = time.time()
+        data_loader_iter = data_loader #iter(data_loader)
+        info_all = defaultdict(list)
+        # iter = 0
+        while True:
+            try:
+                batch = next(data_loader_iter)
+            except RuntimeError:
+                break
+            input_batch, input_mask= self.process_batch(batch, mode=classifier_mode)
+            gt_labels = self.load_batch_labels(batch)
+            with TorchUtils.maybe_no_grad(no_grad=True):
+                info = self.forward_training(input_batch, input_mask, gt_labels=gt_labels)
+    
+            del batch  # dont need to keep these
+        # torch.cuda.empty_cache()
+            # timing_stats["Train_Batch"].append(time.time() - t)
+            # print('Evaluating time', timing_stats["Train_Batch"][-1])
+            ## log
+            # print('Iteration', iter)
+            # iter += 1
+            # if info['y_pred'] != info['y_true']:
+                # print('info', info)
+            info_all['y_pred'].extend(info['y_pred'].cpu())
+            info_all['y_true'].extend(info['y_true'].cpu()) 
+        overall_acc = (torch.Tensor(info_all['y_pred']) == torch.Tensor(info_all['y_true'])).float().mean()
+        class_acc, matrix = self.confusion_matrix(y_true=torch.Tensor(info_all['y_true']), y_pred=torch.Tensor(info_all['y_pred']), num_classes=2)
+        self.logger.scalar(f"Eval/overall_acc", overall_acc)
+        self.logger.scalar(f"Eval/class_acc_fail", class_acc[0])
+        self.logger.scalar(f"Eval/class_acc_success", class_acc[1])
+        self.logger.scalar(f"Eval/class_acc_fnr", matrix[1,0])
+        self.logger.scalar(f"Eval/class_acc_fpr", matrix[0,1])
+        print('Eval', 'overall_acc', overall_acc)
+        print('Eval', 'class_acc_fail', class_acc[0])
+        print('Eval', 'class_acc_success', class_acc[1])
+        print('Eval', 'class_acc_fnr', matrix[1,0])
+        print('Eval', 'class_acc_fpr', matrix[0,1])
+        #     for key in info.keys():
+        #         if isinstance(info[key], dict):
+        #             for sub_key in info[key].keys():
+        #                 info_all[key+'/'+sub_key].append(info[key][sub_key].cpu().numpy())
+        #                 # self.logger.scalar(f"Eval/{key}/{sub_key}", info[key][sub_key])
+        #         # else:
+        #         else: 
+        #             info_all[key].append(info[key].cpu().numpy())
+        #             # self.logger.scalar(f"Eval/{key}", info[key])
+        #     # for key in timing_stats.keys():
+        #         # self.logger.scalar(f"timing/{key}", np.mean(timing_stats[key]))
+        # for key in info_all.keys():
+        #     if isinstance(info_all[key], dict):
+        #         for sub_key in info_all[key].keys():
+        #             self.logger.scalar(f"Eval/{key}/{sub_key}", np.mean(info_all[key][sub_key]))
+        #             print('Eval', key, sub_key, np.mean(info_all[key][sub_key]))
+        #     self.logger.scalar(f"Eval/{key}", np.mean(info_all[key]))
+        #     print('Eval', key, np.mean(info_all[key]))
+        self.logger.write(step=epoch)
+        return 
+    def process_data(self, data):
+        norm_path = '/data/wm_data/GraspCup_data/norm_dict_abs.json'
+        with open(norm_path, 'r') as f:
+            norm_dict = json.load(f)
+        for key in norm_dict.keys():
+            norm_dict[key] = np.array(norm_dict[key])
+        state = data['obs']['state'][35:36]
+        state = (state - norm_dict['ob_min']) / (norm_dict['ob_max'] - norm_dict['ob_min'])
+        state = 2* state - 1
+        actions = data['actions_abs'][35: 35 + 64]
+        actions = (actions - norm_dict['ac_min']) / (norm_dict['ac_max'] - norm_dict['ac_min'])
+        actions = 2* actions - 1
+        front_image = data['obs']['cam_front_view_image'][35: 36][None]
+        wrist_image = data['obs']['cam_wrist_view_image'][35: 36][None]
+        input = {}
+        size = 64
+        input['action'] = actions[None]
+        input['state'] = state[None]
+        input['cam_front_view_image'] = front_image
+        input['cam_wrist_view_image'] = wrist_image
+        input['is_first'] = np.array([1] + [0]*(64-1), dtype=np.bool_)[None]
+        # input['is_last'] = np.array([0]*size, dtype=np.bool_)
+        input['is_terminal'] = np.array([0]*size, dtype=np.bool_)[None]
+        input['label'] = data.attrs['label']
+        return input
+    def predict_labels(self, data):
+        self.nets['classifier'].eval()
+        with TorchUtils.maybe_no_grad(no_grad=True):
+            # input_batch, input_mask = self.process_batch(data, mode='whole')
+            input = self.process_data(data)
+            embed = self.wm.get_latent(input, imagined_steps = 63, sample_size=16, actual_lengths = torch.ones((1,)).to(self.device)*64)
+            pred_logits = self.nets['classifier'].forward(embed = embed, key_padding_mask=None)
+            pred_logits_traj = pred_logits[:, -1, :]
+            pred_classes = torch.argmax(pred_logits_traj, dim=-1)
+            label = 1 if data.attrs['label'] in [0, 3] else 0
+            print('pred_classes', pred_classes)
+            print('label', label)
+            print('pred_logits', pred_logits_traj)
+        return label, pred_classes
+    def evaluate_whole_dataset(self, data_loader, epoch = None, classifier_mode = 'whole'):
+        self.nets['classifier'].eval()
+
+        # step_log_all = []
+        # timing_stats = dict(Data_Loading=[], Process_Batch=[], Train_Batch=[])
+        # start_time = time.time()
+        data_loader_iter = data_loader #iter(data_loader)
+        info_all = defaultdict(list)
+        iter = 0
+        while True:
+            try:
+                batch = next(data_loader_iter)
+            except RuntimeError:
+                break
+            input_batch, input_mask= self.process_batch(batch, mode=classifier_mode)
+            gt_labels = self.load_batch_labels(batch)
+            with TorchUtils.maybe_no_grad(no_grad=True):
+                info = self.forward_training(input_batch, input_mask, gt_labels=gt_labels)
+    
+            del batch  # dont need to keep these
+        # torch.cuda.empty_cache()
+            # timing_stats["Train_Batch"].append(time.time() - t)
+            # print('Evaluating time', timing_stats["Train_Batch"][-1])
+            ## log
+            print('Iteration', iter)
+            iter += 1
+            if info['y_pred'] != info['y_true']:
+                print('info', info)
+            info_all['y_pred'].extend(info['y_pred'].cpu())
+            info_all['y_true'].extend(info['y_true'].cpu()) 
+        overall_acc = (torch.Tensor(info_all['y_pred']) == torch.Tensor(info_all['y_true'])).float().mean()
+        class_acc, matrix = self.confusion_matrix(y_true=torch.Tensor(info_all['y_true']), y_pred=torch.Tensor(info_all['y_pred']), num_classes=2)
+        self.logger.scalar(f"Eval/overall_acc", overall_acc)
+        self.logger.scalar(f"Eval/class_acc_fail", class_acc[0])
+        self.logger.scalar(f"Eval/class_acc_success", class_acc[1])
+        self.logger.scalar(f"Eval/class_acc_fnr", matrix[1,0])
+        self.logger.scalar(f"Eval/class_acc_fpr", matrix[0,1])
+        print('Eval', 'overall_acc', overall_acc)
+        print('Eval', 'class_acc_fail', class_acc[0])
+        print('Eval', 'class_acc_success', class_acc[1])
+        print('Eval', 'class_acc_fnr', matrix[1,0])
+        print('Eval', 'class_acc_fpr', matrix[0,1])
+        #     for key in info.keys():
+        #         if isinstance(info[key], dict):
+        #             for sub_key in info[key].keys():
+        #                 info_all[key+'/'+sub_key].append(info[key][sub_key].cpu().numpy())
+        #                 # self.logger.scalar(f"Eval/{key}/{sub_key}", info[key][sub_key])
+        #         # else:
+        #         else: 
+        #             info_all[key].append(info[key].cpu().numpy())
+        #             # self.logger.scalar(f"Eval/{key}", info[key])
+        #     # for key in timing_stats.keys():
+        #         # self.logger.scalar(f"timing/{key}", np.mean(timing_stats[key]))
+        # for key in info_all.keys():
+        #     if isinstance(info_all[key], dict):
+        #         for sub_key in info_all[key].keys():
+        #             self.logger.scalar(f"Eval/{key}/{sub_key}", np.mean(info_all[key][sub_key]))
+        #             print('Eval', key, sub_key, np.mean(info_all[key][sub_key]))
+        #     self.logger.scalar(f"Eval/{key}", np.mean(info_all[key]))
+        #     print('Eval', key, np.mean(info_all[key]))
+        self.logger.write(step=epoch)
+        return 
+    
+    def train_classifier(self, validate = False, num_steps = None,  epoch = None, data_loader = None, classifier_mode = 'split'):
+        # epoch_timestamp = time.time()
+        if validate:
+            self.nets['classifier'].eval()
+        else:
+            self.nets['classifier'].train()
+        if num_steps is None:
+            num_steps = len(data_loader)
+
+        # step_log_all = []
+        timing_stats = dict(Data_Loading=[], Process_Batch=[], Train_Batch=[])
+        # start_time = time.time()
+
+        data_loader_iter = data_loader #iter(data_loader)
+        if not validate:
+            ## training loop through the whole training set
+            for _step in trange(
+                num_steps,
+                desc="Classifier training",
+                ncols=0,
+                leave=False,
+            ):
+
+                # load next batch from data loader
+                try:
+                    t = time.time()
+                    batch = next(data_loader_iter)
+                except StopIteration:
+                    # reset for next dataset pass
+                    data_loader_iter = iter(data_loader)
+                    t = time.time()
+                    batch = next(data_loader_iter)
+                timing_stats["Data_Loading"].append(time.time() - t)
+                print('loading time', timing_stats["Data_Loading"][-1])
+                # process batch for training
+                t = time.time()
+                # input_batch = model.process_batch_for_training(batch)
+                input_batch, input_mask= self.process_batch(batch, mode=classifier_mode)
+                gt_labels = self.load_batch_labels(batch)
+                # input_batch = model.postprocess_batch_for_training(input_batch, obs_normalization_stats=obs_normalization_stats)
+                timing_stats["Process_Batch"].append(time.time() - t)
+                print('processing time', timing_stats["Process_Batch"][-1])
+                # forward and backward pass
+                t = time.time()
+                
+            
+                info = self.train_on_batch(input_batch, input_mask, gt_labels=gt_labels,validate=validate)
+                timing_stats["Train_Batch"].append(time.time() - t)
+                print('training time', timing_stats["Train_Batch"][-1])
+                for key in info.keys():
+                    
+                    if isinstance(info[key], dict):
+                        for sub_key in info[key].keys():
+                            if 'y_pred' in sub_key or 'y_true' in sub_key:
+                                continue
+                            self.logger.scalar(f"{key}/{sub_key}", info[key][sub_key])
+                    else:
+                        self.logger.scalar(key, info[key])
+                    
+                for key in timing_stats.keys():
+                    self.logger.scalar(f"timing/{key}", np.mean(timing_stats[key]))
+                self.logger.write(step=_step+ epoch * num_steps)
+            return num_steps * epoch + num_steps -1
+        else: 
+            ## evaluate sample one batch from the validation set
+            self.evaluate_whole_dataset(data_loader=data_loader, epoch = epoch, classifier_mode = classifier_mode)
+            # t = time.time()
+            # batch = next(data_loader_iter)
+            # timing_stats["Data_Loading"].append(time.time() - t)
+            # print('loading time', timing_stats["Data_Loading"][-1])
+            # # process batch for eval
+            # t = time.time() 
+            # input_batch, input_mask= self.process_batch(batch)
+            # gt_labels = self.load_batch_labels(batch)
+            # timing_stats["Process_Batch"].append(time.time() - t)
+            # print('processing time', timing_stats["Process_Batch"][-1])
+            # # forward pass
+            # t = time.time()
+            # # info = self.forward_training(input_batch, input_mask, gt_labels=gt_labels, real_lengths = real_lengths)
+            # info = self.train_on_batch(input_batch, input_mask, gt_labels=gt_labels,validate=validate)
+            # timing_stats["Train_Batch"].append(time.time() - t)
+            # print('Evaluating time', timing_stats["Train_Batch"][-1])
+            # ## log
+            # for key in info.keys():
+            #     if isinstance(info[key], dict):
+            #         for sub_key in info[key].keys():
+                        
+            #             if 'y_pred' in sub_key or 'y_true' in sub_key:
+            #                 continue
+            #             self.logger.scalar(f"Eval/{key}/{sub_key}", info[key][sub_key])
+            #     else:
+
+            #         self.logger.scalar(f"Eval/{key}", info[key])
+            # for key in timing_stats.keys():
+            #     self.logger.scalar(f"timing/{key}", np.mean(timing_stats[key]))
+            # self.logger.write(step=num_steps)
             return None
             
             

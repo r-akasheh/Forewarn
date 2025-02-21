@@ -535,9 +535,9 @@ class WorldModel(nn.Module):
         #         feat = imagined_feat[:, :total_steps]
         # else: 
             feat = torch.cat([history_feat[:, -1:], imagined_feat], dim=1)
-            frames = self.get_latent_video(data, history_feat[:, -1:], imagined_feat, actual_lengths)
-            self.save_video(frames, f'video_from_60_freq1__{self.num}.mp4')
-            self.num +=1 
+            # frames = self.get_latent_video(data, history_feat[:, -1:], imagined_feat, actual_lengths)
+            # self.save_video(frames, f'/home/yilin/Projects/failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/imagined_videos_15/video_world_model_imagination_from_0_freq1__{self.num}.mp4')
+            # self.num +=1
             # if imagined_steps == 0:
             #   
                 # feat = self.uniform_sample_batch(feat, actual_lengths, num_samples=sample_size)
@@ -555,7 +555,63 @@ class WorldModel(nn.Module):
             
             # feat = feat[:, np.linspace(0, feat.size(1)-1, sample_size).astype(int)]
         return feat
-    
+    def get_latent_gt(self, data, mode='all', imagined_steps = 0, total_steps = 1, sample_size = 0, actual_lengths=None):
+        # frames = self.video_pred(data)
+        # self.save_video(frames[0], f'video_new_pred{self.num}.mp4')
+        self.dynamics.sample = False
+        data = self.preprocess(data)
+         
+        with torch.cuda.amp.autocast(self._use_amp):
+        # if True:
+            embed = self.encoder(data)
+            obs_size = embed.size(1)
+            ## pass in the data of before imagined steps
+            obs_size = 64 #obs_size - imagined_steps
+            post, prior = self.dynamics.observe(embed[:, :obs_size], data["action"][:, :obs_size], data["is_first"][:, :obs_size])
+            if mode == 'all':
+                history_feat = self.dynamics.get_feat(post)
+            elif mode == 'z':
+                history_feat = self.dynamics.get_z(post)
+            else: 
+                raise NotImplementedError
+            # # if imagined_steps > 0:
+            # init = {k: v[:, -1] for k, v in post.items()}
+            # prior = self.dynamics.imagine_with_action(data["action"][:, obs_size:], init)
+            # if mode == 'all':
+            #     imagined_feat = self.dynamics.get_feat(prior)[:, :imagined_steps]
+            # elif mode == 'z':
+            #     imagined_feat = self.dynamics.get_z(prior)[:, :imagined_steps]
+            # else: 
+            #     imagined_feat = torch.zeros_like(history_feat)
+        # feat = torch.cat([history_feat, imagined_feat], dim=1)[:,:total_steps]
+        # if sample_size == 0:
+        #     if total_steps > imagined_steps:
+        #         feat = torch.cat([history_feat[:, -total_steps + imagined_steps:], imagined_feat[:, :imagined_steps]], dim=1)
+        #     else:
+        #         feat = imagined_feat[:, :total_steps]
+        # else: 
+            # feat = torch.cat([history_feat[:, -1:], imagined_feat], dim=1)
+            feat = history_feat
+            # frames = self.get_latent_video(data,history_feat,None, actual_lengths)
+            # self.save_video(frames, f'/home/yilin/Projects/failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realcup_data/imagined_videos/video_world_model_gt_cup_data_from_35_freq1__{self.num}.mp4')
+            # self.num +=1 
+            # if imagined_steps == 0:
+            #   
+                # feat = self.uniform_sample_batch(feat, actual_lengths, num_samples=sample_size)
+            # else: 
+                ## sample every 4th step use ::4
+                # freq = data['action'].size(1) // total_steps
+                # print('total length', data['action'].size(1))
+                # print('feat size', feat.size())
+
+                # total_length = data['action'].size(1)
+                # feat = feat[:, torch.linspace(0, total_length-1, sample_size, device=feat.device).round().long()]
+                # feat = feat[:, ::freq]
+            feat = self.uniform_sample_batch(feat,actual_lengths, num_samples=sample_size)
+
+            
+            # feat = feat[:, np.linspace(0, feat.size(1)-1, sample_size).astype(int)]
+        return feat
     # def get_latent(self, data, mode='all', imagined_steps = 0, total_steps = 1, sample_size = 0, actual_lengths=None):
     #     self.dynamics.sample = False
     #     data = self.preprocess(data)
@@ -678,50 +734,61 @@ class WorldModel(nn.Module):
     def get_latent_video(self, data, history_feat, imagine_feat, actual_lengths):
                
         image_keys = self._config.obs_keys
-        imagined_steps = imagine_feat.size(1)
-        recon = torch.cat([self.heads["decoder"](history_feat)[key].mode() for key in image_keys], 3)
-        # recon = self.heads["decoder"](self.dynamics.get_feat(states))[
-        #     "image"
-        # ].mode()[:6]
-        # preds = [self.heads["decoder"](self.dynamics.get_feat(prior))[key] for key in image_keys]
-        # openl = torch.cat([self.heads["decoder"](self.dynamics.get_feat(prior))[key].mode() for key in image_keys], 3)
-        # eval_loss = {}
-        openl = []
-        truth = []
-        for key in image_keys:
-            pred = self.heads["decoder"](imagine_feat)[key]
-            ## remove the padding from the pred by getting the elements of the actual_lengths and padding the rest with the last element
-            processed_pred = self.remove_padding_and_repeat(pred.mode(), actual_lengths)
-            # processed_pred = pred.mode()
+        if imagine_feat is None:
+            model = torch.cat([self.heads["decoder"](history_feat)[key].mode() for key in image_keys], 3)
+            truth = []
+            for key in image_keys:
+                truth.append(data[key][:])
+            truth = torch.cat(truth, 3)
+            size = model.size(1)
+            error = (model - truth[:,:size] + 1.0) / 2.0
+            # return model
+            return torch.cat([truth[:,:size], model, error], 2) 
+        else: 
+            imagined_steps = imagine_feat.size(1)
+            recon = torch.cat([self.heads["decoder"](history_feat)[key].mode() for key in image_keys], 3)
+            # recon = self.heads["decoder"](self.dynamics.get_feat(states))[
+            #     "image"
+            # ].mode()[:6]
+            # preds = [self.heads["decoder"](self.dynamics.get_feat(prior))[key] for key in image_keys]
+            # openl = torch.cat([self.heads["decoder"](self.dynamics.get_feat(prior))[key].mode() for key in image_keys], 3)
+            # eval_loss = {}
+            openl = []
+            truth = []
+            for key in image_keys:
+                pred = self.heads["decoder"](imagine_feat)[key]
+                ## remove the padding from the pred by getting the elements of the actual_lengths and padding the rest with the last element
+                processed_pred = self.remove_padding_and_repeat(pred.mode(), actual_lengths)
+                # processed_pred = pred.mode()
+                
+                openl.append(processed_pred)
+                # eval_loss[key] = -pred.log_prob(data[key][:6][:, obs_steps:])
+                # openl.append(pred.mode())
+                # last imagined_steps
+                truth.append(data[key][:, -imagined_steps-1:])
+            openl = torch.cat(openl, 3)
+            truth = torch.cat(truth, 3)
             
-            openl.append(processed_pred)
-            # eval_loss[key] = -pred.log_prob(data[key][:6][:, obs_steps:])
-            # openl.append(pred.mode())
-            # last imagined_steps
-            truth.append(data[key][:, -imagined_steps-1:])
-        openl = torch.cat(openl, 3)
-        truth = torch.cat(truth, 3)
-        
-        #model_hand = torch.cat([recon_hand[:, :5], openl_hand], 1)
-        # truth = torch.cat([data[key][:6] for key in image_keys], 3)
+            #model_hand = torch.cat([recon_hand[:, :5], openl_hand], 1)
+            # truth = torch.cat([data[key][:6] for key in image_keys], 3)
 
-        # row, col = torch.where(data['is_first'][:6, obs_steps:] == 1.)
-        # for i in range(row.size(0)):
-            # data['is_first'][row[i], obs_steps+col[i]:] = 1.
-            # openl[row[i], col[i]:] = openl[row[i], col[i]-1]
-            # truth[row[i], obs_steps+col[i]:] = truth[row[i], obs_steps+col[i]-1]
-        
-        # observed image is given until 5 steps
-        model = torch.cat([recon, openl], 1)
-        #truth_hand = data["robot0_eye_in_hand_image"][:6]
-        size = model.size(1)
-        error = (model - truth[:,:size] + 1.0) / 2.0
-        #error_hand = (model_hand - truth_hand + 1.0) / 2.0
-        ## record the evaluation loss here
-        # return model
-        return torch.cat([truth[:,:size], model, error], 2) #torch.cat(
-            #[truth_hand, model_hand, error_hand], 2
-        #)
+            # row, col = torch.where(data['is_first'][:6, obs_steps:] == 1.)
+            # for i in range(row.size(0)):
+                # data['is_first'][row[i], obs_steps+col[i]:] = 1.
+                # openl[row[i], col[i]:] = openl[row[i], col[i]-1]
+                # truth[row[i], obs_steps+col[i]:] = truth[row[i], obs_steps+col[i]-1]
+            
+            # observed image is given until 5 steps
+            model = torch.cat([recon, openl], 1)
+            #truth_hand = data["robot0_eye_in_hand_image"][:6]
+            size = model.size(1)
+            error = (model - truth[:,:size] + 1.0) / 2.0
+            #error_hand = (model_hand - truth_hand + 1.0) / 2.0
+            ## record the evaluation loss here
+            # return model
+            return torch.cat([truth[:,:size], model, error], 2) #torch.cat(
+                #[truth_hand, model_hand, error_hand], 2
+            #)
 
     def video_recon(self, data):
         data = self.preprocess(data)
@@ -836,6 +903,7 @@ class WorldModel(nn.Module):
 
 
 class ImagBehavior(nn.Module):
+    
     def __init__(self, config, world_model):
         super(ImagBehavior, self).__init__()
         self._use_amp = True if config.precision == 16 else False
