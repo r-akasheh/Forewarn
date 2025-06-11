@@ -16,7 +16,7 @@ def update_demo_label(hdf5_file_path, demo_index, output_file):
     """
     with h5py.File(hdf5_file_path, 'r') as file:
         demo_key = f'demo_{demo_index}'
-        labels = [2,0,5,0,2,1,1,6,1,1,2,2,5,2,0,6,3,1,3]
+        # labels = [2,0,5,0,2,1,1,6,1,1,2,2,5,2,0,6,3,1,3]
         if demo_key not in file['data']:
             print(f"Demo {demo_key} not found in the HDF5 file.")
             return
@@ -131,33 +131,33 @@ def update_demo_length (hdf5_file_path, demo_index, output_file):
             # if key in output_file['data'][demo_key].keys():
                 # del output_file['data'][demo_key][key]
             
-            if demo_index <= 100:
-                file.copy(value, output_file['data'][demo_key], name=key)
-            else:
+            # if demo_index <= 100:
+            #     file.copy(value, output_file['data'][demo_key], name=key)
+            # else:
                 
-                cut_length = 160
-                start_index = 0
-                if demo_index == 134:
-                    cut_length = 200
-                    start_index = 99
-                if demo_index == 142:
-                    start_index = 46
-                    cut_length = 160
-                if demo_index in [178, 179]:
-                    start_index = 90
-                    cut_length = 170
+            #     cut_length = 160
+            #     start_index = 0
+            #     if demo_index == 134:
+            #         cut_length = 200
+            #         start_index = 99
+            #     if demo_index == 142:
+            #         start_index = 46
+            #         cut_length = 160
+            #     if demo_index in [178, 179]:
+            #         start_index = 90
+            #         cut_length = 170
                 if key != 'obs':
                     # Copy the first 160 elements for non-'obs' keys
                     # output_file['data'][demo_key][key] = value[start_index:cut_length]
                     output_file['data'][demo_key].create_dataset(
-                        key, data=value[start_index:cut_length]
+                        key, data=value#[start_index:cut_length]
                     )
                 else:
                     # For 'obs', iterate over subkeys and copy the first 160 elements
                     output_file['data'][demo_key].create_group('obs')
                     for subkey in value.keys():
                         output_file['data'][demo_key][key].create_dataset(
-                            subkey, data=value[subkey][start_index:cut_length]
+                            subkey, data=value[subkey]#[start_index:cut_length]
                         )
         # Also copy the attributes
         for key, value in attrs_dict.items():

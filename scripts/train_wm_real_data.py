@@ -197,6 +197,7 @@ def train_eval(config):
     # tools.fill_expert_dataset_dubins(config, expert_eps)
     if config.data_range == 'all':
         print('loading unfiltered data for world model training!!!')
+        ## TODO fill in your own data processing functions
         
         observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data_no_filtering(config, success_eps, failure_eps)
     else:
@@ -215,6 +216,7 @@ def train_eval(config):
     failure_val_eps = collections.OrderedDict() 
     if config.data_range == 'all':
         print('loading unfiltered data for world model training!!!')
+        ## TODO fill in your own data processing function
         tools.fill_expert_dataset_real_data_no_filtering(config, success_val_eps, failure_val_eps, is_val_set=True)
     else: 
         tools.fill_expert_dataset_real_data(config, success_val_eps, failure_val_eps,  is_val_set=True)
@@ -307,16 +309,8 @@ def train_eval(config):
     # acts = train_envs[0].action_space
     print(dir(action_space))
     bounds = np.array([[-1.1, 1.1], [-1.1, 1.1], [0, 2 * np.pi]])
-    low = bounds[:, 0]
-    high = bounds[:, 1]
 
-    # # Gym variables.
-    # midpoint = (low + high) / 2.0
-    # interval = high -low
-    # observation_space = spaces.Box(
-    #     np.float32(midpoint - interval/2),
-    #     np.float32(midpoint + interval/2),
-    # )
+
 
     print(f"Action Space: {action_space}.")# Low: {acts.low}. High: {acts.high}")
     config.num_actions = action_space.n if hasattr(action_space, "n") else action_space.shape[0]

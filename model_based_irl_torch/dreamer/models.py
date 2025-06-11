@@ -535,9 +535,9 @@ class WorldModel(nn.Module):
         #         feat = imagined_feat[:, :total_steps]
         # else: 
             feat = torch.cat([history_feat[:, -1:], imagined_feat], dim=1)
-            # frames = self.get_latent_video(data, history_feat[:, -1:], imagined_feat, actual_lengths)
-            # self.save_video(frames, f'/home/yilin/Projects/failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/imagined_videos_15/video_world_model_imagination_from_0_freq1__{self.num}.mp4')
-            # self.num +=1
+            frames = self.get_latent_video(data, history_feat[:, -1:], imagined_feat, actual_lengths)
+            self.save_video(frames, f'/home/yilin/Projects/failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/imagined_videos_20/video_world_model_imagination_from_0_freq1__{self.num}.mp4')
+            self.num +=1
             # if imagined_steps == 0:
             #   
                 # feat = self.uniform_sample_batch(feat, actual_lengths, num_samples=sample_size)

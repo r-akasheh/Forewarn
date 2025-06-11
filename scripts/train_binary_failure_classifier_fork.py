@@ -49,7 +49,7 @@ from dreamer.tools import ModelEvaluator
 from gym import spaces
 from gym.spaces import Discrete 
 import gym
-import h5py
+
 # def train_lx(ckpt_name, log_dir):
 #     recon_steps = 2501
 #     best_pretrain_success_classifier = float("inf")
@@ -116,34 +116,31 @@ def main(config):
     if config.debug:
         logger = tools.DebugLogger(logdir, config.action_repeat * step)
     else:
-        logger = tools.Logger(logdir, 0, name = config.wandb_name)#config.action_repeat * step)
+        logger = tools.Logger(logdir, 0,  name = config.wandb_name)#config.action_repeat * step)
     logger.config(vars(config))
     logger.write() 
-    
     
     ## build the training buffer
     # success_eps = collections.OrderedDict()
     all_eps = collections.OrderedDict()
     empty_eps = collections.OrderedDict()
     # failure_eps = collections.OrderedDict()
-    observation_space, action_space, _, _, _  =  tools.fill_expert_dataset_real_fork_data_for_classifier(config, all_eps, empty_eps, is_val_set= True)
-    # all_eps = tools.merge_two_dicts_no_relabel(all_eps, empty_eps)
-    all_eps = empty_eps
-    eval_dataset = make_classifier_dataset(all_eps, config)
-    # # tools.fill_expert_dataset_robocasa(config, failure_eps, is_val_set=False, dataset_type='failure')
-    # # all_eps = tools.merge_two_cache_dicts(success_eps, failure_eps)
-    # train_dataset = make_classifier_dataset(all_eps, config)
+    observation_space, action_space, _, _, _  =  tools.fill_expert_dataset_real_fork_data_for_classifier(config, all_eps, empty_eps )
+    # tools.fill_expert_dataset_robocasa(config, failure_eps, is_val_set=False, dataset_type='failure')
+    # all_eps = tools.merge_two_cache_dicts(success_eps, failure_eps)
+    train_dataset = make_classifier_dataset(all_eps, config)
     # validation replay buffer
-    # success_val_eps = collections.OrderedDict()
-    # failure_val_eps = collections.OrderedDict()
-    # tools.fill_expert_dataset_real_data_for_classifier(config, success_val_eps, failure_val_eps,  is_val_set=True)
-    # # observation_space, action_space, _, _, _  = tools.fill_expert_dataset_robocasa(config, success_val_eps, is_val_set=True, dataset_type='success')
-    # # success_val_dataset = make_eval_dataset(success_val_eps, config)
-    # # failure_val_eps = collections.OrderedDict() 
-    # # tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, dataset_type='failure')
-    # # all_eps_eval = tools.merge_two_cache_dicts(success_val_eps, failure_val_eps)
+    success_val_eps = collections.OrderedDict()
+    failure_val_eps = collections.OrderedDict()
+    tools.fill_expert_dataset_real_fork_data_for_classifier(config, success_val_eps, failure_val_eps,  is_val_set=True)
+    # observation_space, action_space, _, _, _  = tools.fill_expert_dataset_robocasa(config, success_val_eps, is_val_set=True, dataset_type='success')
+    # success_val_dataset = make_eval_dataset(success_val_eps, config)
+    # failure_val_eps = collections.OrderedDict() 
+    # tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, dataset_type='failure')
+    # all_eps_eval = tools.merge_two_cache_dicts(success_val_eps, failure_val_eps)
     # all_eps_eval = tools.merge_two_dicts_no_relabel(success_val_eps, failure_val_eps)
-    # eval_dataset = make_classifier_dataset(all_eps_eval, config)
+    all_eps_eval = failure_val_eps
+    eval_dataset = make_classifier_dataset(all_eps_eval, config)
     # failure_val_dataset = make_eval_failure_dataset(failure_val_eps, config)
     print(f"Action Space: {action_space}.") # Low: {acts.low}. High: {acts.high}")
     config.num_actions = action_space.n if hasattr(action_space, "n") else action_space.shape[0]
@@ -210,48 +207,21 @@ def main(config):
     classifier_trainer = ClassifierLatentTrainer(wm = agent._wm, logger = logger, device = config.device, config = config,
                                            num_training_steps = 2* config.num_exp_trajs//config.classifier_batch_size*config.classifier_epoch,
                                            )
-    classifier_checkpoint = torch.load(config.classifier_ckpt)
-    classifier_trainer.nets.load_state_dict(classifier_checkpoint['agent_state_dict'])
-    classifier_trainer.evaluate_whole_dataset(eval_dataset, classifier_mode = config.classifier_mode)
-    # file = h5py.File('/data/wm_data/GraspFork_data/GraspFork_demo_classifier.hdf5', 'r')
-    # # file = h5py.File('/home/yilin/Projects/failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/test.hdf5', 'r')
-    # demos = list(file['data'].keys())
-    # inds = np.argsort([int(elem[5:]) for elem in demos])
-    # demos = [demos[i] for i in inds]
-    # labels = []
-    # preds = []
-    # # for i in range(300, len(demos)):
-    # for i in range(300):
-    # # for i in range(len(demos )):
-    #     demo = demos[i]
-    #     label, pred = classifier_trainer.predict_labels(file['data'][demo])
-    #     labels.append(label)
-    #     preds.append(pred.cpu().numpy()[0])
-    # ## compute accuracy
-    # labels = np.array(labels)
-    # preds = np.array(preds)
-    # accuracy = np.sum(labels == preds) / len(labels)
-    # print('Accuracy:', accuracy)
-    # ## compute confusion matrix
-    # confusion_matrix = np.zeros((3,3))
-    # for i in range(3):
-    #     for j in range(3):
-    #         confusion_matrix[i,j] = np.sum(np.logical_and(labels == i, preds == j))
-    # print('Confusion Matrix:', confusion_matrix)
-    
-    # for epoch in range(config.classifier_epoch):
-    #     train_steps = classifier_trainer.train_classifier(epoch = epoch, 
-    #                                         num_steps = 2* config.num_exp_trajs//config.classifier_batch_size, 
-    #                                         data_loader = train_dataset,
-    #                                         classifier_mode = config.classifier_mode)
-    #     classifier_trainer.train_classifier(epoch = epoch,
-    #                                        num_steps =train_steps,
-    #                                        data_loader = eval_dataset, 
-    #                                        validate=True,
-    #                                        classifier_mode = config.classifier_mode)
-    #     print('train_steps', train_steps)
-    #     classifier_ckpt_name = "classifier"
-    #     tools.save_classifier_checkpoint( classifier_ckpt_name ,agent = classifier_trainer.nets, step = train_steps, logdir=logdir)
+    for epoch in range(config.classifier_epoch):
+        train_steps = classifier_trainer.train_classifier(epoch = epoch, 
+                                            num_steps = 2* config.num_exp_trajs//config.classifier_batch_size, 
+                                            data_loader = train_dataset,
+                                            classifier_mode = config.classifier_mode)
+        classifier_trainer.train_classifier(epoch = epoch,
+                                           num_steps =train_steps,
+                                           data_loader = eval_dataset, 
+                                           validate=True,
+                                           classifier_mode = config.classifier_mode)
+        print('train_steps', train_steps)
+        classifier_ckpt_name = "classifier"
+        torch.cuda.empty_cache()
+        
+        tools.save_classifier_checkpoint( classifier_ckpt_name ,agent = classifier_trainer.nets, step = train_steps, logdir=logdir)
 
 def make_dataset(episodes, config):
     generator = tools.sample_episodes(episodes, config.batch_length)
@@ -260,9 +230,8 @@ def make_dataset(episodes, config):
 
 def make_classifier_dataset(episodes, config):
     # generator = tools.sample_full_episodes(episodes, config.classifier_batch_length,  mode = config.classifier_padding_mode)
-    sampler = tools.EvalEpisodeSampler()
-    generator = sampler.sample_partial_episodes(episodes , config.classifier_batch_length,  mode = config.classifier_padding_mode, start_index = config.classifier_start_index, max_length=64 )
-    dataset = tools.from_generator(generator, 1)
+    generator = tools.sample_partial_episodes(episodes , config.classifier_batch_length,  mode = config.classifier_padding_mode, start_index = config.classifier_start_index, max_length=config.classifier_start_index+config.classifier_batch_length) 
+    dataset = tools.from_generator(generator, config.classifier_batch_size)
     return dataset
 
 def make_eval_dataset(episodes, config):
@@ -287,9 +256,10 @@ def recursive_update(base, update):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--configs", nargs="+")
-    parser.add_argument('--config_path', type = str, default='config.yaml')
     parser.add_argument("--expt_name", type=str, default=None)
     parser.add_argument("--resume_run", type=bool, default=False)
+    parser.add_argument('--config_path', type = str, default='config.yaml')
+    
     config, remaining = parser.parse_known_args()
 
     if not config.resume_run:
@@ -302,9 +272,10 @@ if __name__ == "__main__":
 
     yaml = yaml.YAML(typ="safe", pure=True)
     configs = yaml.load(
+        # (pathlib.Path(sys.argv[0]).parent / "../configs/config.yaml").read_text()
         (pathlib.Path(sys.argv[0]).parent / "../configs" / config.config_path).read_text()
-    )
 
+    )
     name_list = ["defaults", *config.configs] if config.configs else ["defaults"]
 
     defaults = {}

@@ -43,7 +43,16 @@ def convert_pickle_to_hdf5(input_dir, output_file):
         else :
             data_group = hdf5_file['data']
             index = len(data_group.keys()) + 1
-        
+        mode_dict = {}
+        mode_file_path = os.path.join(input_dir, 'mode.txt')
+        if not os.path.exists(mode_file_path):
+            print(folder, 'does not have mode file')
+            # continue
+        if os.path.exists(mode_file_path):
+            with open(mode_file_path, 'r') as mode_file:
+                for line in mode_file:
+                    file_id, mode_id = line.strip().split(', ')
+                    mode_dict[file_id] = mode_id
         # Iterate over all pickle files in the input directory
         input_dir_folders = os.listdir(input_dir)
         input_dir_folders.sort()
@@ -55,18 +64,10 @@ def convert_pickle_to_hdf5(input_dir, output_file):
                 continue
             # if folder != 'optimal':
                 # continue
-            folder_path = os.path.join(input_dir, folder)
-            if os.path.isdir(folder_path):
-                mode_dict = {}
-            mode_file_path = os.path.join(folder_path, 'mode.txt')
-            if not os.path.exists(mode_file_path):
-                print(folder, 'does not have mode file')
-                # continue
-            if os.path.exists(mode_file_path):
-                with open(mode_file_path, 'r') as mode_file:
-                    for line in mode_file:
-                        file_id, mode_id = line.strip().split(', ')
-                        mode_dict[file_id] = mode_id
+            folder_path = os.path.join(input_dir, folder, 'end')
+            # if os.path.isdir(folder_path):
+            #     mode_dict = {}
+            
             # breakpoint()
             all_files = os.listdir(folder_path)
             all_files.sort()
@@ -85,7 +86,9 @@ def convert_pickle_to_hdf5(input_dir, output_file):
                 index += 1
 
                 # Add attributes to the demo group
-                file_id = str(int(filename.split('_')[1].split('.')[0]))
+                # file_id = str(int(filename.split('_')[1].split('.')[0]))
+                file_id = folder.split('_')[1]
+                print('file_id', file_id)
                 demo_group.attrs['mode'] = mode_dict.get(file_id, 'unknown')
                 mode = mode_dict.get(file_id, 'unknown')
                 print('mode', mode)
@@ -114,7 +117,7 @@ def convert_pickle_to_hdf5(input_dir, output_file):
                 # for trajectory in data[0]:
                     # for step in trajectory:
                 print('file processed', index)
-                for step in data[0]: #[1:]:
+                for step in data[0][1:]:
                     # Extract observations and actions from the step
                     obs_data = step[0]
                     if isinstance(step[1], dict):
