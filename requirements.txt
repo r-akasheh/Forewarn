@@ -1,7 +1,7 @@
 # This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
---extra-index-url https://download.pytorch.org/whl/cu118
+--extra-index-url https://download.pytorch.org/whl/cu124
 --index-url https://pypi.org/simple
 box2d-py==2.3.8
 cloudpickle==3.0.0
@@ -52,9 +52,9 @@ tqdm
 termcolor
 opencv-python
 wandb[media]
-torch==2.3.0+cu118
-torchvision==0.18.0+cu118
-torchaudio==2.3.0+cu118
+torch==2.3.0
+torchvision==0.18.0
+torchaudio==2.3.0
 robomimic
 tensorboard
 h5py
