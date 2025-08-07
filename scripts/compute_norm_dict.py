@@ -25,47 +25,53 @@ def get_min_max_actions(file_path):
             print('key', key)
             
             actions = data[key]['actions'][:]
-            actions_abs = data[key]['actions_abs'][:]
-            print('actions_abs', np.max(actions_abs, axis=0))
-            state = data[key]['obs']['state'][:]
+            # actions_abs = data[key]['actions_abs'][:]
+            # print('actions_abs', np.max(actions_abs, axis=0))
+            # state = data[key]['obs']['state'][:]
+            obs = data[key]['obs']
+            state = np.concatenate([
+                obs["robot0_eef_pos"], 
+                obs["robot0_eef_quat"], 
+                obs["robot0_gripper_qpos"]
+            ], axis=1)
 
             all_actions.append(actions)
-            all_actions_abs.append(actions_abs)
+            # all_actions_abs.append(actions_abs)
             all_states.append(state)
 
         # Concatenate all collected actions into a single array
         all_actions = np.vstack(all_actions)
-        all_actions_abs = np.vstack(all_actions_abs)
+        # all_actions_abs = np.vstack(all_actions_abs)
         all_states = np.vstack(all_states)
         
         # Compute min and max for each dimension (axis=0)
         actions_min = np.min(all_actions, axis=0).tolist()
         actions_max = np.max(all_actions, axis=0).tolist()
-        actions_abs_min = np.min(all_actions_abs, axis=0).tolist()
-        actions_abs_max = np.max(all_actions_abs, axis=0).tolist()
+        # actions_abs_min = np.min(all_actions_abs, axis=0).tolist()
+        # actions_abs_max = np.max(all_actions_abs, axis=0).tolist()
         state_min = np.min(all_states, axis=0).tolist()
         state_max = np.max(all_states, axis=0).tolist()
 
         # Create the normalization dictionary
-        norm_dict_delta = {
+        norm_dict_abs = {
             'ob_min': state_min,
             'ob_max': state_max,
             'ac_min': actions_min,
             'ac_max': actions_max
         }
-        norm_dict_abs = {
-            'ob_min': state_min,
-            'ob_max': state_max,
-            'ac_min': actions_abs_min,
-            'ac_max': actions_abs_max
-        }
+        # norm_dict_abs = {
+        #     'ob_min': state_min,
+        #     'ob_max': state_max,
+        #     'ac_min': actions_abs_min,
+        #     'ac_max': actions_abs_max
+        # }
         output_file = os.path.join(os.path.dirname(file_path), 'norm_dict_abs.json')
         # Save to a JSON file
         with open(output_file, 'w') as json_file:
             json.dump(norm_dict_abs, json_file)
-        output_file = os.path.join(os.path.dirname(file_path), 'norm_dict_delta.json')
-        with open(output_file, 'w') as json_file:
-            json.dump(norm_dict_delta, json_file)
+        # output_file = os.path.join(os.path.dirname(file_path), 'norm_dict_delta.json')
+        # with open(output_file, 'w') as json_file:
+        #     json.dump(norm_dict_delta, json_file)
     return 
     # return norm_dict
 

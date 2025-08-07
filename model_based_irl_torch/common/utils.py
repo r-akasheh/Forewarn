@@ -41,7 +41,7 @@ def get_real_dataset_path_and_env_meta(
 ):
     dataset_path = Path(config.root_dir,  f"{env_id}_data/{env_id}_demo.hdf5")
     # env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
-    return dataset_path, None
+    return '/home/jzyuan/uncertainty_aware_steering/robomimic/datasets/square/combined_wm/shuffled_extra_fails.hdf5', None
 
 def get_real_classifier_dataset_path_and_env_meta(
     config, 
@@ -50,7 +50,7 @@ def get_real_classifier_dataset_path_and_env_meta(
 ):
     dataset_path = Path(config.root_dir,  f"{env_id}_data/{env_id}_demo_classifier.hdf5")
     # env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
-    return dataset_path, None
+    return '/home/jzyuan/uncertainty_aware_steering/robomimic/datasets/square/combined_wm/shuffled_extra_fails.hdf5', None
 def get_robocasa_dataset_path_and_env_meta(
     config,
     env_id,
