@@ -724,7 +724,6 @@ class ClassifierTrainer:
         return torch.diag(conf_matrix_no_nan), conf_matrix_no_nan
 
     def load_batch_labels(self, batch):
-        #TODO: MODIFY THIS FOR YOUR DATASET
         gt_labels = torch.Tensor(batch['label'][:, 0]).to(self.device).long()
         # if gt_labels == 1:
             # gt_labels = torch.zeros_like(gt_labels)

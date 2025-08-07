@@ -329,7 +329,7 @@ def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=Fa
         if action_dim is None:
             ## remove the last base + mode action because it is not used in the policy 
             ## pos: 3dim, axis_angle: 3dim, gripper: 1dim, base: 4 dim, mode: 1 dim
-            action_dim = first_demo["actions"].shape[1]
+            action_dim = first_demo["actions"].shape[1] - 5
         obs_space = {}
         for key in pixel_keys:
             obs_space[key] = Box(0, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
@@ -341,7 +341,7 @@ def fill_expert_dataset_robocasa(config, cache, dataset_type=None, is_val_set=Fa
         obs_space['discount'] = Box(0, 1, shape = (1,))
         obs_space['object_state'] = Box(0, 1, shape = f["data"][demos[0]]["obs"]["object"].shape[1:])
         obs_space['state'] = Box(-1, 1, shape = (state_dim,))
-        obs_space['privileged_state'] = Box(-1, 1, shape = (3,)) #state_dim + 3 ## ???
+        obs_space['privileged_state'] = Box(-1, 1, shape = (3,)) #state_dim + 3
         observation_space = Dict(obs_space)
         for i, demo in tqdm(
             enumerate(demos),
@@ -490,7 +490,7 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
         ## get the dir of dataset_path
         dataset_dir = os.path.dirname(dataset_path)
         # read the norm_dict
-        with open(os.path.join(dataset_dir, f'norm_dict_abs.json'), 'r') as file:
+        with open(os.path.join(dataset_dir, f'norm_dict_{config.action_type}.json'), 'r') as file:
             norm_dict = json.load(file)
         ## make the values of the norm_dict to be np.array
         for key in norm_dict.keys():
@@ -542,7 +542,7 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
                 "ac_max": -np.inf * np.ones(ac_dim, dtype=np.float32),
                 "ac_min": np.inf * np.ones(ac_dim, dtype=np.float32),
             }
-        origin_shape = list(f["data"][demos[0]]["actions"].shape[1:])
+        origin_shape = list(f["data"][demos[0]]["actions_abs"].shape[1:])
         # origin_shape[0] -= 5
         action_space = Box(-1, 1, shape = tuple(origin_shape))
         first_demo = f["data"][demos[0]]
@@ -557,14 +557,14 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
             ## remove the last base + mode action because it is not used in the policy 
             ## pos: 3dim, axis_angle: 3dim, gripper: 1dim, base: 4 dim, mode: 1 dim
             
-            action_dim = first_demo["actions"].shape[1]             
+            action_dim = first_demo["actions_abs"].shape[1]             
         obs_space = {}
-        # if config.action_type == 'delta':
-        #     action_key = "actions"
-        # elif config.action_type == 'abs':
-        action_key = "actions"
-        # else: 
-        #     raise ValueError('action_type should be either delta or abs')
+        if config.action_type == 'delta':
+            action_key = "actions"
+        elif config.action_type == 'abs':
+            action_key = "actions_abs"
+        else: 
+            raise ValueError('action_type should be either delta or abs')
         print('pixel_keys', pixel_keys)
         for key in pixel_keys:
             obs_space[key] = Box(0, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
@@ -638,11 +638,9 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
             # transition = defaultdict(np.array)
             length = len(traj["obs"][pixel_keys[0]])
             # print('length', length)
-            if not is_val_set or label != 0: #label == 0:
+            if not is_val_set or label == 0: #label == 0:
                 # for ind_step in range(2):
-
-                ## ?????
-                if length == 1:
+                if length == 160:
                     ind_step = 41
                     # print('success_id', success_id)
                 else: 
@@ -653,12 +651,12 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
                 for key in pixel_keys:
                     obs_from_ind = np.array(traj["obs"][key])[ind_step::sample_freq]
                     ## concatenate the obs[key][1] to the beginning of the list 
-                    if length == 1:
+                    if length == 160:
                         obs_from_ind = np.concatenate([np.array(traj["obs"][key][1:2]), obs_from_ind], axis=0)
                      
                     cache[f'exp_traj_{success_id}_{ind_step}'][key] = obs_from_ind
                 state_from_ind = stacked_obs["state"][ind_step::sample_freq]
-                if length == 1:
+                if length == 160:
                     state_from_ind = np.concatenate([np.array(stacked_obs["state"][1:2]), state_from_ind], axis=0)
                 ## normalize the state
                 normalized_state = (state_from_ind - norm_dict["ob_min"]) / (norm_dict["ob_max"] - norm_dict["ob_min"])
@@ -668,7 +666,7 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
                 if (length+ind_step) % sample_freq != 0:
                     ## add the last action to the end of the list
                     subsample_actions = np.concatenate([subsample_actions, np.array(traj[action_key][-1:])], axis=0)
-                if length == 1:
+                if length == 160:
                     subsample_actions = np.concatenate([np.array(traj[action_key][ind_step-1:ind_step]), subsample_actions], axis=0)
                 ## normalize the actions based on ac_min, ac_max
                 normalized_actions = (subsample_actions - norm_dict["ac_min"]) / (norm_dict["ac_max"] - norm_dict["ac_min"])
@@ -699,7 +697,7 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
                 # if is_val_set:
                     # breakpoint()
                 # for ind_step in range(2):
-                if length == 1:
+                if length == 160:
                     ind_step = 41
                 else: 
                     if hasattr(config, "classifier_filter") and config.classifier_filter == 'no_demo':
@@ -709,13 +707,13 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
                 for key in pixel_keys:
                     # cache2[f'exp_traj_{failure_id+ind_step}'][key] = np.array(traj["obs"][key])[ind_step::sample_freq]
                     obs_from_ind = np.array(traj["obs"][key])[ind_step::sample_freq]
-                    if length == 1: # not 1:2 because first one has already eliminated
+                    if length == 160: # not 1:2 because first one has already eliminated
                         obs_from_ind = np.concatenate([np.array(traj["obs"][key][:1]), obs_from_ind], axis=0)
                     cache2[f'exp_traj_{failure_id}_{ind_step}'][key] = obs_from_ind
                     
                 # cache[f'exp_traj_{i}']['obs'] = stacked_obs
                 state_from_ind = stacked_obs["state"][ind_step::sample_freq]
-                if length == 1: # not 1:2 because the first one has already eliminated
+                if length == 160: # not 1:2 because the first one has already eliminated
                     state_from_ind = np.concatenate([np.array(stacked_obs["state"][:1]), state_from_ind], axis=0)
                 normalized_state = (state_from_ind - norm_dict["ob_min"]) / (norm_dict["ob_max"] - norm_dict["ob_min"])
                 ## scale from (0,1) to (-1, 1)
@@ -733,7 +731,7 @@ def fill_expert_dataset_real_data(config, cache, cache2, is_val_set=False, paddi
                 if (length + ind_step) % sample_freq != 0:
                     ## add the last action to the end of the list
                     subsample_actions = np.concatenate([subsample_actions, np.array(traj[action_key][-1:])], axis=0)
-                if length == 1:
+                if length == 160:
                     subsample_actions = np.concatenate([np.array(traj[action_key][ind_step -1:ind_step]), subsample_actions], axis=0)
                 ## normalize to (-1, 1)
                 normalized_actions = (subsample_actions - norm_dict["ac_min"]) / (norm_dict["ac_max"] - norm_dict["ac_min"])
@@ -836,7 +834,7 @@ def fill_expert_dataset_real_data_no_filtering(config, cache, cache2, is_val_set
         f = h5py.File(dataset_path, "r")
         ## get the dir of dataset_path
         dataset_dir = os.path.dirname(dataset_path)
-        # read the norm_dict ???
+        # read the norm_dict
         with open(os.path.join(dataset_dir, f'norm_dict_{config.action_type}.json'), 'r') as file:
             norm_dict = json.load(file)
         ## make the values of the norm_dict to be np.array
@@ -847,7 +845,7 @@ def fill_expert_dataset_real_data_no_filtering(config, cache, cache2, is_val_set
         inds = np.argsort([int(elem[5:]) for elem in demos])
         demos = [demos[i] for i in inds]
         ## filter out the demos whose length is larger than 1500
-        # demos = [demo for demo in demos if f['data'][demo]['actions'].shape[0] <= 1500]
+        demos = [demo for demo in demos if f['data'][demo]['actions'].shape[0] <= 1500]
         
         # if is_val_set, we don't fill the first num_exp_trajs which are used for training
         config.num_exp_trajs = (
@@ -873,8 +871,6 @@ def fill_expert_dataset_real_data_no_filtering(config, cache, cache2, is_val_set
         # state_keys = sorted([key for key in obs_keys if "image" not in key])
         state_keys = config.state_keys
         
-        ###### edit here
-
         # Initialize norm_dict if it is None
         if norm_dict is None:
             # Read ob_dim and ac_dim from the first datapoint in the first demo
@@ -911,7 +907,7 @@ def fill_expert_dataset_real_data_no_filtering(config, cache, cache2, is_val_set
         if config.action_type == 'delta':
             action_key = "actions"
         elif config.action_type == 'abs':
-            action_key = "actions"
+            action_key = "actions_abs"
         else: 
             raise ValueError('action_type should be either delta or abs')
         print('pixel_keys', pixel_keys)
@@ -1770,7 +1766,7 @@ def fill_expert_dataset_real_fork_data_for_classifier(config, cache, cache2, is_
         ## get the dir of dataset_path
         dataset_dir = os.path.dirname(dataset_path)
         # read the norm_dict
-        with open(os.path.join(dataset_dir, f'norm_dict_abs.json'), 'r') as file:
+        with open(os.path.join(dataset_dir, f'norm_dict_{config.action_type}.json'), 'r') as file:
             norm_dict = json.load(file)
         ## make the values of the norm_dict to be np.array
         for key in norm_dict.keys():
@@ -1822,7 +1818,7 @@ def fill_expert_dataset_real_fork_data_for_classifier(config, cache, cache2, is_
                 "ac_max": -np.inf * np.ones(ac_dim, dtype=np.float32),
                 "ac_min": np.inf * np.ones(ac_dim, dtype=np.float32),
             }
-        origin_shape = list(f["data"][demos[0]]["actions"].shape[1:])
+        origin_shape = list(f["data"][demos[0]]["actions_abs"].shape[1:])
         # origin_shape[0] -= 5
         action_space = Box(-1, 1, shape = tuple(origin_shape))
         first_demo = f["data"][demos[0]]
@@ -1837,15 +1833,14 @@ def fill_expert_dataset_real_fork_data_for_classifier(config, cache, cache2, is_
             ## remove the last base + mode action because it is not used in the policy 
             ## pos: 3dim, axis_angle: 3dim, gripper: 1dim, base: 4 dim, mode: 1 dim
             
-            action_dim = first_demo["actions"].shape[1]             
+            action_dim = first_demo["actions_abs"].shape[1]             
         obs_space = {}
-        action_key = "actions"
-        # if config.action_type == 'delta':
-        #     action_key = "actions"
-        # elif config.action_type == 'abs':
-        #     action_key = "actions"
-        # else: 
-        #     raise ValueError('action_type should be either delta or abs')
+        if config.action_type == 'delta':
+            action_key = "actions"
+        elif config.action_type == 'abs':
+            action_key = "actions_abs"
+        else: 
+            raise ValueError('action_type should be either delta or abs')
         print('pixel_keys', pixel_keys)
         for key in pixel_keys:
             obs_space[key] = Box(0, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
@@ -1859,7 +1854,7 @@ def fill_expert_dataset_real_fork_data_for_classifier(config, cache, cache2, is_
         obs_space['state'] = Box(-1, 1, shape = (state_dim,))
         # obs_space['privileged_state'] = Box(-1, 1, shape = (3,)) #state_dim + 3
         observation_space = Dict(obs_space)
-        label_types = [[[0,2,5,7],[1,3,6]],[[0,1,2,3],[4,5,6,7]]] # ??????
+        label_types = [[[0,2,5,7],[1,3,6]],[[0,1,2,3],[4,5,6,7]]]
         for i, demo in tqdm(
             enumerate(demos),
             desc="Loading in expert data",
@@ -1927,32 +1922,28 @@ def fill_expert_dataset_real_fork_data_for_classifier(config, cache, cache2, is_
                 #     # print('success_id', success_id)
                 # else: 
                 #     ind_step = 0 
-                for ind_step in [0, 120]: 
+                for ind_step in [0, 60]: 
                 # for ind_step in [60]:
                 # ind_step = 0 
                 
-                    # if length < 100 and ind_step == 60:
-                    #     ind_step -= 30
-                    # if ind_step == 0:
-                    if label == 2 or label == 1:
+                    if length < 100 and ind_step == 60:
+                        ind_step -= 30
+                    if ind_step == 0:
+                        label_type = label_types[0]
+                    else: 
+                        label_type = label_types[1]
+                    print('label_type', label_type)
+                    if label in label_type[0]:
                         new_label = 0
-                    else:
-                        new_label = 2
-                    # else: 
-                        # new_label = label
-                    #     label_type = label_types[1]
-                    # print('label_type', label_type)
-                    # if label in label_type[0]:
-                    #     new_label = 0
-                    # else: 
-                    #     new_label = 1
-                    # print('label', new_label)
+                    else: 
+                        new_label = 1
+                    print('label', new_label)
                     # print('ind_step', ind_step)
-                    # if new_label == 1 and ind_step != 0:
-                    #     num_loop = 4
-                    # else: 
-                    #     num_loop = 1
-                    num_loop = 1
+                    if new_label == 1 and ind_step != 0:
+                        num_loop = 4
+                    else: 
+                        num_loop = 1
+                    # num_loop = 1
                     # print('num_loop', num_loop)
                     for loop in range(num_loop):
                         cache[f'exp_traj_{success_id}_{ind_step}']  = {}
@@ -2010,34 +2001,27 @@ def fill_expert_dataset_real_fork_data_for_classifier(config, cache, cache2, is_
                     # ind_step = 41
                 # else: 
                     # ind_step = 0
-                for ind_step in [0, 120]:
+                for ind_step in [0, 60]:
                 # for ind_step in [60]:
                 # ind_step = 0
-                    # if ind_step == 60 and length < 100:
-                    #     ind_step -= 30
-                    # if length < 100 and ind_step == 60:
-                    #     ind_step -= 30
-                    # if ind_step == 0:
-                    #     label_type = label_types[0]
-                    # else: 
-                    #     label_type = label_types[1]
-                    # if label in label_type[0]:
-                    #     new_label = 0
-                    # else: 
-                    #     new_label = 1
-                    # if ind_step == 0:
-                    if label == 2 or label == 1:
+                    if ind_step == 60 and length < 100:
+                        ind_step -= 30
+                    if length < 100 and ind_step == 60:
+                        ind_step -= 30
+                    if ind_step == 0:
+                        label_type = label_types[0]
+                    else: 
+                        label_type = label_types[1]
+                    if label in label_type[0]:
                         new_label = 0
-                    else:
+                    else: 
                         new_label = 1
-                    # else: 
-                    #     new_label = label
                     # if label == 1 and ind_step != 0:
                     #     num_loop = 4
                     # else: 
                     #     num_loop = 1 
                     num_loop = 1
-                    # print('num_loop', num_loop)
+                    print('num_loop', num_loop)
                     for loop in range(num_loop):
                         cache2[f'exp_traj_{failure_id}_{ind_step}']  = {}
                         for key in pixel_keys:

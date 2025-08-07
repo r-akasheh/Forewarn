@@ -39,39 +39,38 @@ def combine_hdf5_files(args):
                 print(f"Copied {key} from {file1}")
     # breakpoint()
     # # Open the output file in append mode and the second HDF5 file in read mode
-    for file2 in files[1:]:
-        with h5py.File(output_file, 'a') as f_out:
-            with h5py.File(file2, 'r') as f2:
-                data_group = f_out['data']
+    with h5py.File(output_file, 'a') as f_out:
+        with h5py.File(file2, 'r') as f2:
+            data_group = f_out['data']
 
-                # Find the maximum existing demo number in the output file
-                existing_keys = [key for key in data_group.keys() if key.startswith('demo_')]
-                if existing_keys:
-                    max_num = max(int(key.split('_')[1]) for key in existing_keys)
+            # Find the maximum existing demo number in the output file
+            existing_keys = [key for key in data_group.keys() if key.startswith('demo_')]
+            if existing_keys:
+                max_num = max(int(key.split('_')[1]) for key in existing_keys)
+            else:
+                max_num = 0
+
+            # Iterate over the keys in the second file and copy them to the output file
+            # inds = np.argsort([int(elem[5:]) for elem in f2['data'].keys()])
+            # keys = [list(f2['data'].keys())[i] for i in inds]
+            keys = list(f2['data'].keys())
+            for i, key in enumerate(keys):
+                if key.startswith('demo_'):
+                    # Automatically increment the key number
+                    
+                    # if i in [0,13,16,17]:
+                    #     if i != 0:
+                    #         assert f2['data'][key].attrs['label'] == 2
+                    #     continue
+                    
+                    max_num += 1
+                    new_key = f'demo_{max_num}'
+                    f2.copy(f'data/{key}', data_group, name=new_key)
+                    print(f"Copied {key} as {new_key}")
                 else:
-                    max_num = 0
-
-                # Iterate over the keys in the second file and copy them to the output file
-                # inds = np.argsort([int(elem[5:]) for elem in f2['data'].keys()])
-                # keys = [list(f2['data'].keys())[i] for i in inds]
-                keys = list(f2['data'].keys())
-                for i, key in enumerate(keys):
-                    if key.startswith('demo_'):
-                        # Automatically increment the key number
-                        
-                        # if i in [0,13,16,17]:
-                        #     if i != 0:
-                        #         assert f2['data'][key].attrs['label'] == 2
-                        #     continue
-                        
-                        max_num += 1
-                        new_key = f'demo_{max_num}'
-                        f2.copy(f'data/{key}', data_group, name=new_key)
-                        print(f"Copied {key} as {new_key}")
-                    else:
-                        f2.copy(f'data/{key}', data_group)
-                        print(f"Copied {key}")
-                print('the number of all the demos:', len(data_group.keys()))
+                    f2.copy(f'data/{key}', data_group)
+                    print(f"Copied {key}")
+            print('the number of all the demos:', len(data_group.keys()))
             
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

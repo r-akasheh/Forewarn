@@ -536,7 +536,7 @@ class WorldModel(nn.Module):
         # else: 
             feat = torch.cat([history_feat[:, -1:], imagined_feat], dim=1)
             frames = self.get_latent_video(data, history_feat[:, -1:], imagined_feat, actual_lengths)
-            self.save_video(frames, f'/home/jzyuan/uncertainty_aware_steering/wm_vids/video_world_model_imagination_from_0_freq1__{self.num}.mp4')
+            self.save_video(frames, f'/home/yilin/Projects/failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/imagined_videos_20/video_world_model_imagination_from_0_freq1__{self.num}.mp4')
             self.num +=1
             # if imagined_steps == 0:
             #   
@@ -716,7 +716,7 @@ class WorldModel(nn.Module):
         max_actual_length = actual_length.max()
 
         # Create a range tensor [0, 1, 2, ..., max_actual_length-1]
-        range_tensor = torch.arange(max_actual_length, device=pred.device).unsqueeze(0).expand(batch_size, int(max_actual_length.item()))
+        range_tensor = torch.arange(max_actual_length, device=pred.device).unsqueeze(0).expand(batch_size, max_actual_length)
 
         # Clamp indices to the last valid index for each sequence
         # This ensures that for positions >= actual_length, the index is actual_length - 1
@@ -727,7 +727,6 @@ class WorldModel(nn.Module):
         indices = indices.expand(-1, -1, H, W, C)
 
         # Gather the required elements from pred based on the computed indices
-        indices = indices.to(torch.int64)
         processed_pred = torch.gather(pred, dim=1, index=indices)
 
         return processed_pred

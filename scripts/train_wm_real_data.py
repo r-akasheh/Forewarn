@@ -195,13 +195,13 @@ def train_eval(config):
 
     # print(success_eps)
     # tools.fill_expert_dataset_dubins(config, expert_eps)
-    # if config.data_range == 'all':
-    #     print('loading unfiltered data for world model training!!!')
-    #     ## TODO fill in your own data processing functions
+    if config.data_range == 'all':
+        print('loading unfiltered data for world model training!!!')
+        ## TODO fill in your own data processing functions
         
-    #     observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data_no_filtering(config, success_eps, failure_eps)
-    # else:
-    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data(config, success_eps,failure_eps,)
+        observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data_no_filtering(config, success_eps, failure_eps)
+    else:
+        observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data(config, success_eps,failure_eps,)
     # expert_dataset = make_dataset(expert_eps, config)
     #
     success_dataset = make_dataset(success_eps, config)
@@ -214,12 +214,12 @@ def train_eval(config):
     # validation replay buffer
     success_val_eps = collections.OrderedDict()
     failure_val_eps = collections.OrderedDict() 
-    # if config.data_range == 'all':
-    #     print('loading unfiltered data for world model training!!!')
-    #     ## TODO fill in your own data processing function
-    #     tools.fill_expert_dataset_real_data_no_filtering(config, success_val_eps, failure_val_eps, is_val_set=True)
-    # else: 
-    tools.fill_expert_dataset_real_data(config, success_val_eps, failure_val_eps,  is_val_set=True)
+    if config.data_range == 'all':
+        print('loading unfiltered data for world model training!!!')
+        ## TODO fill in your own data processing function
+        tools.fill_expert_dataset_real_data_no_filtering(config, success_val_eps, failure_val_eps, is_val_set=True)
+    else: 
+        tools.fill_expert_dataset_real_data(config, success_val_eps, failure_val_eps,  is_val_set=True)
     success_val_dataset = make_dataset(success_val_eps, config)
     # tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, dataset_type='failure')
     failure_val_dataset = make_dataset(failure_val_eps, config)

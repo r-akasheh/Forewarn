@@ -2,7 +2,7 @@ import h5py
 import random
 
 # Open the HDF5 file
-file_path = '/home/jzyuan/uncertainty_aware_steering/robomimic/datasets/square/combined_wm/70k_rollouts_and_demos_extra_fails.hdf5'
+file_path = '/data/wm_data/GraspBag_data/bag_demo.hdf5'
 with h5py.File(file_path, 'r+') as file:
     data = file['data']
     
@@ -22,9 +22,9 @@ with h5py.File(file_path, 'r+') as file:
     
     # Select the last 36 keys with the desired label distribution
     last_36_keys = (
-        label_0_keys[:48] + 
-        label_1_keys[:24] + 
-        label_2_keys[:24]
+        label_0_keys[:12] + 
+        label_1_keys[:12] + 
+        label_2_keys[:12]
     )
     
     # The rest of the keys
@@ -36,7 +36,7 @@ with h5py.File(file_path, 'r+') as file:
     new_order = remaining_keys + last_36_keys
     
     # Create a new HDF5 file to avoid overwriting issues
-    with h5py.File('/home/jzyuan/uncertainty_aware_steering/robomimic/datasets/square/combined_wm/shuffled_extra_fails.hdf5', 'w') as new_file:
+    with h5py.File('/data/wm_data/GraspBag_data/GraspBag_demo.hdf5', 'w') as new_file:
         new_data = new_file.create_group('data')
         ## the key in new_data starts from demo_1 to demo_336
         for i,key in enumerate(new_order):
