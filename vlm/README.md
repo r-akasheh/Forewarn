@@ -127,7 +127,7 @@ CUDA_VISIBLE_DEVICES=0 python recipes/quickstart/inference/local_inference/llama
 
 **Fork (stage 1):**
 ```bash
---custom_dataset.file "recipes/quickstart/finetuning/datasets/realfork_dataset_latent_all.py" 
+--custom_dataset.file "recipes/quickstart/finetuning/datasets/realfork_dataset_latent.py" 
 --custom_dataset.data_path "realfork_data" 
 --custom_dataset.start_index 60 
 --peft_model_name /data/finetuned_models/Forewarn_VLMs/fork_ckpt
