@@ -64,19 +64,19 @@ cd Forewarn
 
 ### 2) Create the conda environment
 
-** create env + pip install**
+**create env + pip install**
 ```bash
 conda env create -f environment.yaml
 conda activate forewarn
 pip install -r requirements.txt
 ```
-** install dreamer wm**
+**install dreamer wm**
 ```bash
 cd model_based_irl_torch
 pip install -e .
 ```
 
-** install llama-recipes for vlm **
+**install llama-recipes for vlm**
 ```bash
 cd vlm/llama-recipes
 pip install -e .
