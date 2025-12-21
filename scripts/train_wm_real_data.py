@@ -51,64 +51,10 @@ from gym import spaces
 from gym.spaces import Discrete 
 import gym
 
-# def mixed_success_failure_sample(
-#     batch_size, success_dataset, failure_dataset, device, remove_obs_stack=False
-# ):
-#     """ "
-#     Sample 50% from expert dataset and 50% from self.train_eps
-#     If remove_obs_stack is True, keep only latest obs in the batch
-#     """
-#     assert batch_size % 2 == 0, "Batch Size should be even."
 
-#     success_batch = next(success_dataset)
-#     failure_batch = next(failure_dataset)
-
-#     # Merge the two batches
-#     data_batch = {}
-
-#     for key in success_batch.keys():
-#         # Stack the success and failure batches for each key at once and convert to tensor
-#         stacked_data = torch.tensor(
-#             np.concatenate([success_batch[key], failure_batch[key]], axis=0), 
-#             dtype=torch.float32, 
-#             device=device  # Move to the correct device in one go
-#         )
-#         data_batch[key] = stacked_data
-#     if remove_obs_stack:
-#         data_batch = remove_obs_stack(data_batch)
-
-#     return data_batch
 import torch
 
-# def mixed_success_failure_sample(
-#     batch_size, success_dataset, failure_dataset, device, remove_obs_stack=False
-# ):
-#     """
-#     Sample 50% from expert dataset and 50% from failure dataset.
-#     If remove_obs_stack is True, keep only latest obs in the batch.
-#     """
-#     assert batch_size % 2 == 0, "Batch Size should be even."
 
-#     # Sample from the datasets
-#     success_batch = next(success_dataset)
-#     failure_batch = next(failure_dataset)
-
-#     # Merge the two batches
-#     data_batch = {}
-
-#     for key in success_batch.keys():
-#         # Stack directly with PyTorch
-#         stacked_data = torch.cat(
-#             [torch.tensor(success_batch[key], dtype=torch.float32, device=device),
-#              torch.tensor(failure_batch[key], dtype=torch.float32, device=device)],
-#             dim=0
-#         )
-#         data_batch[key] = stacked_data
-
-#     if remove_obs_stack:
-#         data_batch = remove_obs_stack(data_batch)
-
-#     return data_batch
 from concurrent.futures import ThreadPoolExecutor
 
 def mixed_success_failure_sample(
@@ -133,8 +79,7 @@ def mixed_success_failure_sample(
              torch.tensor(failure_batch[key], dtype=torch.float32, device=device)],
             dim=0
         )
-        # data_batch[key] = stacked_data
-        # Move to the target device using non_blocking and pin memory
+        
         return key, stacked_data
 
     # Use ThreadPoolExecutor to parallelize the for loop
@@ -188,77 +133,15 @@ def train_eval(config):
     logger.write()
 
     # ==================== Create dataset ====================
-    # expert replay buffer
-    # expert_eps = collections.OrderedDict()
-    success_eps = collections.OrderedDict()
-    failure_eps = collections.OrderedDict()
+    # replay buffer
+    all_eps = collections.OrderedDict()
+  
+    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data(config, all_eps)
+    all_dataset = make_dataset(all_eps, config)
+    val_eps = collections.OrderedDict()
+    tools.fill_expert_dataset_real_data(config, val_eps, is_val_set=True)
+    val_dataset = make_dataset(val_eps, config)
 
-    # print(success_eps)
-    # tools.fill_expert_dataset_dubins(config, expert_eps)
-    if config.data_range == 'all':
-        print('loading unfiltered data for world model training!!!')
-        ## TODO fill in your own data processing functions
-        
-        observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data_no_filtering(config, success_eps, failure_eps)
-    else:
-        observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data(config, success_eps,failure_eps,)
-    # expert_dataset = make_dataset(expert_eps, config)
-    #
-    success_dataset = make_dataset(success_eps, config)
-   
-   
-    # tools.fill_expert_dataset_robocasa(config, failure_eps, dataset_type='failure')
-    failure_dataset = make_dataset(failure_eps, config)
-    
-    
-    # validation replay buffer
-    success_val_eps = collections.OrderedDict()
-    failure_val_eps = collections.OrderedDict() 
-    if config.data_range == 'all':
-        print('loading unfiltered data for world model training!!!')
-        ## TODO fill in your own data processing function
-        tools.fill_expert_dataset_real_data_no_filtering(config, success_val_eps, failure_val_eps, is_val_set=True)
-    else: 
-        tools.fill_expert_dataset_real_data(config, success_val_eps, failure_val_eps,  is_val_set=True)
-    success_val_dataset = make_dataset(success_val_eps, config)
-    # tools.fill_expert_dataset_robocasa(config, failure_val_eps, is_val_set=True, dataset_type='failure')
-    failure_val_dataset = make_dataset(failure_val_eps, config)
-
-    # split expert dataset into train and eval
-    # obs_train_success_eps = collections.OrderedDict()
-    # obs_eval_success_eps = collections.OrderedDict()
-    # obs_train_failure_eps = collections.OrderedDict()
-    # obs_eval_failure_eps = collections.OrderedDict()
-    # for i, (key, value) in enumerate(success_eps.items()):
-    #     if i < int(len(success_eps) * 0.7):
-    #         obs_train_success_eps[key] = value
-    #     else:
-    #         obs_eval_success_eps[key] = value
-    # for i, (key, value) in enumerate(failure_eps.items()):
-    #     if i < int(len(failure_eps) * 0.7):
-    #         obs_train_failure_eps[key] = value
-    #     else:
-    #         obs_eval_failure_eps[key] = value
-
-    # obs_eval_success_dataset = make_dataset(obs_eval_success_eps, config)
-    # obs_train_success_dataset = make_dataset(obs_train_success_eps, config)
-    # obs_eval_failure_dataset = make_dataset(obs_eval_failure_eps, config)
-    # obs_train_failure_dataset = make_dataset(obs_train_failure_eps, config)
-
-    # # learner + eval replay buffer
-    # if config.offline_traindir:
-    #     # possibly replace 'data/{dataset}/{model}" with keys in config
-    #     directory = config.offline_traindir.format(**vars(config))
-    # else:
-    #     directory = config.traindir
-    # # train_eps = tools.load_episodes(directory, limit=config.prefill)
-    # if config.offline_evaldir:
-    #     directory = config.offline_evaldir.format(**vars(config))
-    # else:
-    #     directory = config.evaldir
-    # # eval_eps = tools.load_episodes(directory, limit=1)
-    # train_dataset = make_dataset(train_eps, config)
-    # eval_dataset = make_dataset(expert_val_eps, config)
     
 
     # ==================== Create envs ====================
@@ -266,48 +149,18 @@ def train_eval(config):
 
 
     # == CONFIGURATION ==
-    # env_name = "dubins_car_img-v1"
+    
     env_name = config.task + '_img'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    maxUpdates = config.maxUpdates
-    updateTimes = config.updateTimes
-    updatePeriod = int(maxUpdates / updateTimes)
-    updatePeriodHalf = int(updatePeriod / 2)
+
 
     # == Environment ==
     print("\n== Environment Information ==")
-    if config.doneType == 'toEnd':
-        sample_inside_obs = True
-    elif config.doneType == 'TF' or config.doneType == 'fail':
-        sample_inside_obs = False
 
-    print(env_name)
-    # train_env = gym.make(
-    #     env_name, config=config, device=device, mode=config.mode, doneType=config.doneType,
-    #     sample_inside_obs=sample_inside_obs
-    # )
+    print('env_name', env_name)
+ 
 
-    # print(train_env.observation_space)
-    # print(train_env.action_space)
-    # train_envs = [train_env]
-    # eval_env = gym.make(
-    #     env_name, config=config, device=device, mode=config.mode, doneType=config.doneType,
-    #     sample_inside_obs=sample_inside_obs
-    # )
-    # eval_envs = [eval_env]
 
-    '''train_envs = [make_env(config) for i in range(config.envs)]
-    eval_envs = [make_env(config) for i in range(config.envs)]
-    if config.parallel:
-        train_envs = [Parallel(env, "process") for env in train_envs]
-        eval_envs = [Parallel(env, "process") for env in eval_envs]
-    else:
-        train_envs = [Damy(env) for env in train_envs]
-        eval_envs = [Damy(env) for env in eval_envs]
-    acts = train_envs[0].action_space'''
-    ### TODO: CLEAN ABOVE ###
-    # acts = train_envs[0].action_space
-    print(dir(action_space))
     bounds = np.array([[-1.1, 1.1], [-1.1, 1.1], [0, 2 * np.pi]])
 
 
@@ -317,20 +170,17 @@ def train_eval(config):
 
     # ==================== Create Agent ====================
     agent = Dreamer(
-        # train_envs[0].observation_space,
-        # train_envs[0].action_space,
+
         observation_space,
         action_space,
         config,
         logger,
-        success_dataset,
-        expert_dataset=failure_dataset if config.hybrid_training else None,
+        all_dataset,
     ).to(config.device)
     agent.requires_grad_(requires_grad=False)
     if config.from_ckpt and Path(config.from_ckpt).exists():
         print(f"Loading ckpt from {config.from_ckpt}")
-        # checkpoint = torch.load(config.from_ckpt)
-        # step_so_far = checkpoint['total_step']
+      
         if config.critic_ensemble_size > 1 or config.reward_ensemble_size > 1:
             # only false if loading with different ensemble size
             mk, uk = agent.load_state_dict(checkpoint["agent_state_dict"], strict=False)
@@ -386,77 +236,7 @@ def train_eval(config):
         plot_arr = np.array(plot)
         logger.image("pretrain/" + title, np.transpose(plot_arr, (2, 0, 1)))
 
-    # def eval_obs_recon():
-        # recon_steps = 101
-        # obs_mlp, obs_opt = agent._wm._init_obs_mlp(config, config.priv_dim)
-        # train_loss_success = []
-        # eval_loss_success = []
-        # train_loss_failure = []
-        # eval_loss_failure = []
-        # for i in range(recon_steps):
-        #     if i % int(recon_steps/4) == 0:
-        #         new_loss_success = agent.pretrain_regress_obs(
-        #             next(obs_eval_success_dataset), obs_mlp, obs_opt, eval=True
-        #         )
-        #         eval_loss_success.append(new_loss_success)
-        #         new_loss_failure = agent.pretrain_regress_obs(
-        #             next(obs_eval_failure_dataset), obs_mlp, obs_opt, eval=True
-        #         )
-        #         eval_loss_failure.append(new_loss_failure)
-        #     else:
-        #         new_loss_success = agent.pretrain_regress_obs(
-        #             next(obs_train_success_dataset), obs_mlp, obs_opt
-        #         )
-        #         new_loss_failure = agent.pretrain_regress_obs(
-        #             next(obs_train_failure_dataset), obs_mlp, obs_opt
-        #         )
-        #         train_loss_success.append(new_loss_success)
-        #         train_loss_failure.append(new_loss_failure)
-        # log_plot("train_recon_loss_for_success", train_loss_success)
-        # log_plot("eval_recon_loss_for_success", eval_loss_success)
-        # log_plot("train_recon_loss_for_failure", train_loss_failure)
-        # log_plot("eval_recon_loss_for_failure", eval_loss_failure)
-        # logger.scalar("pretrain/train_recon_loss_min_for_success", np.min(train_loss_success))
-        # logger.scalar("pretrain/eval_recon_loss_min_for_success", np.min(eval_loss_success))
-        # logger.scalar("pretrain/train_recon_loss_min_for_failure", np.min(train_loss_failure))
-        # logger.scalar("pretrain/eval_recon_loss_min_for_failure", np.min(eval_loss_failure))
-        # logger.write(step=logger.step)
-        # del obs_mlp, obs_opt  # dont need to keep these
-        # torch.cuda.empty_cache()
-        # return (np.min(eval_loss_success) + np.min(eval_loss_failure))/2
     
-    # def train_lx(ckpt_name, log_dir):
-    #     recon_steps = 2501
-    #     best_pretrain_success_classifier = float("inf")
-    #     lx_mlp, lx_opt = agent._wm._init_lx_mlp(config, 1)
-    #     train_loss = []
-    #     eval_loss = []
-    #     for i in range(recon_steps):
-    #         if i % 250 == 0:
-    #             print('eval')
-    #             new_loss, eval_plot = agent.train_lx(
-    #                 next(obs_eval_dataset), lx_mlp, lx_opt, eval=True
-    #             )
-    #             eval_loss.append(new_loss)
-    #             logger.image("classifier", np.transpose(eval_plot, (2, 0, 1)))
-    #             logger.write(step=i+40000)
-    #             best_pretrain_success_classifier = tools.save_checkpoint(
-    #                 ckpt_name, i, new_loss, best_pretrain_success_classifier, lx_mlp, logdir
-    #             )
-
-    #         else:
-    #             new_loss, _ = agent.train_lx(
-    #                 next(obs_train_dataset), lx_mlp, lx_opt
-    #             )
-    #             train_loss.append(new_loss)
-    #     log_plot("train_lx_loss", train_loss)
-    #     log_plot("eval_lx_loss", eval_loss)
-    #     logger.scalar("pretrain/train_lx_loss_min", np.min(train_loss))
-    #     logger.scalar("pretrain/eval_lx_loss_min", np.min(eval_loss))
-    #     logger.write(step=i)
-    #     print(eval_loss)
-    #     print('logged')
-    #     return lx_mlp, lx_opt
 
     def evaluate(other_dataset=None, eval_prefix=""):
         agent.eval()
@@ -477,30 +257,22 @@ def train_eval(config):
                 episodes=1,
                 eval_prefix=eval_prefix,
             )'''
-            video_pred_success, success_loss = agent._wm.video_pred(next(success_val_dataset))
-            video_pred_failure, failure_loss = agent._wm.video_pred(next(failure_val_dataset))
-            #video_pred = agent._wm.video_pred(next(expert_dataset))
-            logger.video("eval_recon_success/openl_agent", to_np(video_pred_success))
-            logger.video("eval_recon_failure/openl_agent", to_np(video_pred_failure))
-            for key in success_loss.keys():
-                logger.scalar(f'eval_recon_success/{key}', float(torch.mean(success_loss[key]).cpu().numpy()))
-                logger.scalar(f'eval_recon_failure/{key}', float(torch.mean(failure_loss[key]).cpu().numpy()))
-            #logger.video("eval_recon/openl_hand", to_np(video_pred2))
+            video_pred, loss = agent._wm.video_pred(next(val_dataset))
+            
+            logger.video("eval_recon/openl_agent", to_np(video_pred))
+            for key in loss.keys():
+                logger.scalar(f'eval_recon/{key}', float(torch.mean(loss[key]).cpu().numpy()))
+            
 
             if other_dataset:
-                # for i in range(len(other_dataset)):
-                for i in range(1):
-                    video_pred, loss = agent._wm.video_pred(next(other_dataset[i]))
-                    if i == 0:
-                    
-                        logger.video("train_recon_success/openl_agent", to_np(video_pred))
-                        for key in loss:
-                            logger.scalar(f'train_recon_success/{key}', float(torch.mean(loss[key]).cpu().numpy()))
-                    else:
-                        logger.video("train_recon_failure/openl_agent", to_np(video_pred))
-                        for key in loss:
-                            logger.scalar(f'train_recon_failure/{key}', float(torch.mean(loss[key]).cpu().numpy()))
-                #logger.video("train_recon/openl_hand", to_np(video_pred2))
+                
+               
+                video_pred, loss = agent._wm.video_pred(next(other_dataset))
+               
+                logger.video("train_recon/openl_agent", to_np(video_pred))
+                for key in loss:
+                    logger.scalar(f'train_recon/{key}', float(torch.mean(loss[key]).cpu().numpy()))
+           
 
         # Get stats
         '''eval_success, eval_score, eval_ep_len = ModelEvaluator(
@@ -513,32 +285,18 @@ def train_eval(config):
         ).evaluate_agent()'''
 
         # Update the metrics in the logger
-        #logger.scalar(f"{eval_prefix}/eval_return", eval_score)
-        #logger.scalar(f"{eval_prefix}/eval_length", eval_ep_len)
-        #logger.scalar(f"{eval_prefix}/eval_success", eval_success)
+     
         logger.scalar(
             f"{eval_prefix}/eval_episodes", config.eval_num_seeds * config.eval_per_seed
         )
         logger.write(step=logger.step)
-        # recon_eval = eval_obs_recon()  # testing observation reconstruction
-
-        # Evaluate MSE for pretraining
-        # with torch.no_grad():
-        #     eval_agent = tools.DreamerAgent(agent)
-        #     avg_mse = tools.evaluate_mse_trajectories(
-        #        eval_agent, expert_val_eps, config
-        #     )
-        # logger.scalar(f"{eval_prefix}/validation_mse", avg_mse)
-
-        # agent.train()
-        # return recon_eval, recon_eval
-        loss = 0
-        for key in success_loss.keys():
-            loss += np.mean(float(torch.mean(success_loss[key]).cpu().numpy()) + float(torch.mean(failure_loss[key]).cpu().numpy()))
-            # logger.scalar(f'eval_recon_success/{key}', float(torch.mean(success_loss[key]).cpu().numpy()))
-        # loss = np.mean(success_loss['total'] + failure_loss['total'])
-        return  loss, loss
-        #return eval_score, eval_success
+       
+        total_loss = 0
+        for key in loss.keys():
+            total_loss += np.mean(float(torch.mean(loss[key]).cpu().numpy()))
+   
+        return  total_loss, loss
+      
 
 
 
@@ -568,41 +326,30 @@ def train_eval(config):
             ncols=0,
             leave=False,
         ):
-            # start_time = time.time()
+            
             if (
                 config.eval_num_seeds > 0
                 and ((step + 1) % config.eval_every) == 0
                 or step == 1
-                # and step > 0
+    
             ):
                
                 print('eval')
                 score, success = evaluate(
-                    other_dataset=[success_dataset, failure_dataset], eval_prefix="pretrain"
+                    other_dataset=all_dataset, eval_prefix="pretrain"
                 )
-                # print('evalaute time', time.time() - start_time)
-                # start_time = time.time()
-                best_pretrain_success = tools.save_checkpoint(
-                    ckpt_name, step, success, best_pretrain_success, agent, logdir
-                )
+           
+           
 
-            # start_time = time.time()
-
-            # exp_data = next(expert_dataset)
-            # sample = mixed_success_failure_sample(success_dataset=success_dataset, failure_dataset=failure_dataset, batch_size=config.batch_size, device=config.device)
-            sample = next(success_dataset)
-            # print('sample time', time.time() - start_time)
-            # start_time = time.time()
+          
+           
+            sample = next(all_dataset)
+       
             agent.pretrain_model_only(sample, step)
-            # print('train time', time.time() - start_time)
-            # agent.pretrain_actor_model(exp_data, step)
+        
 
 
-        # close_envs(train_envs + eval_envs)
-    
-    # ==================== Training l(x) classifier ====================
-    # print('training l(x)')
-    # lx_mlp, lx_opt = train_lx('classifier', logdir)
+
     exit()
 
 
