@@ -64,18 +64,24 @@ cd Forewarn
 
 ### 2) Create the conda environment
 
-**Option A (recommended): create env + pip install**
+** create env + pip install**
 ```bash
-conda create -n latent python=3.10 -y
-conda activate latent
+conda env create -f environment.yaml
+conda activate forewarn
 pip install -r requirements.txt
 ```
-
-**Option B (if `requirements.txt` is a conda explicit spec on your setup)**
+** install dreamer wm**
 ```bash
-conda create --name latent --file requirements.txt
-conda activate latent
+cd model_based_irl_torch
+pip install -e .
 ```
+
+** install llama-recipes for vlm **
+```bash
+cd vlm/llama-recipes
+pip install -e .
+```
+
 
 ---
 
