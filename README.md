@@ -1,93 +1,231 @@
-# latent-safety
+# 🌟 Forewarn
 
-# making conda env
+**Paper:** *From Foresight to Forethought: VLM-In-the-Loop Policy Steering via Latent Alignment*  
+**arXiv:** https://arxiv.org/abs/2502.01828  
+**Project website:** https://yilin-wu98.github.io/forewarn/  
+
+**Authors:** Yilin Wu¹, Ran Tian², Gokul Swamy¹, Andrea Bajcsy¹  
+¹ Carnegie Mellon University · ² UC Berkeley
+
+---
+
+## 📌 Overview
+
+This repository contains the official code for **Forewarn**, a framework that combines:
+
+- 🌍 **World Model** (Dreamer-v3 style) trained on real robot rollouts & demonstrations
+- 🦙 **VLM verifier** (modified Llama-3.2-11B-Vision-Instruct) that consumes **WM latents** for:
+  - ✍️ **Stage 1:** behavior description generation
+  - ✅ **Stage 2:** behavior selection under different scenarios
+
+For VLM-specific setup and commands, see: **[`vlm/README.md`](./vlm/README.md)**.
+
+---
+
+## 🗂️ Repository Structure
+
+The main code lives in **`model_based_irl_torch/`** (world model) and **`vlm/llama-recipes/`** (VLM).
+
+### Key paths
+
+- 📦 **World Model datasets (WM data):** ` /data/wm_data/ `  
+  Place the WM datasets for **cup / bag / fork** tasks here (default).  
+  You can change this via `root_dir` in the YAML configs.
+
+- 📦 **VLM datasets (VLM data):**  
+  `./vlm/llama-recipes/recipes/quickstart/finetuning/datasets/`  
+  Place VLM datasets for **cup / bag / fork** tasks here (and dataset-loading code lives here too).
+
+- 🧩 **World Model code:** [`model_based_irl_torch/`](./model_based_irl_torch/)  
+  Dreamer-v3 world model + utilities.
+
+- 🧠 **VLM code (modified Llama):** [`vlm/llama-recipes/`](./vlm/llama-recipes/)  
+  Modified Llama-3.2-11B-Vision-Instruct and training/inference scripts.  
+  Details: **[`vlm/README.md`](./vlm/README.md)**
+
+- 🔥 **World Model training entry:** [`scripts/train_wm_real_data.py`](./scripts/train_wm_real_data.py)
+
+- 🔥 **VLM finetuning entry:**  
+  [`vlm/llama-recipes/src/llama_recipes/finetuning_wm.py`](./vlm/llama-recipes/src/llama_recipes/finetuning_wm.py)
+
+- 🔎 **VLM inference entry:**  
+  [`vlm/llama-recipes/recipes/quickstart/inference/local_inference/llama_wm_infer.py`](./vlm/llama-recipes/recipes/quickstart/inference/local_inference/llama_wm_infer.py)
+
+---
+
+## ⬇️ Installation
+
+### 1) Clone the repo (with submodules)
+
+```bash
+git clone --recurse-submodules git@github.com:CMU-IntentLab/Forewarn.git
+cd Forewarn
 ```
+
+### 2) Create the conda environment
+
+**Option A (recommended): create env + pip install**
+```bash
+conda create -n latent python=3.10 -y
+conda activate latent
+pip install -r requirements.txt
+```
+
+**Option B (if `requirements.txt` is a conda explicit spec on your setup)**
+```bash
 conda create --name latent --file requirements.txt
-```
-# preprocess the data
-save all the rollouts in hdf5 file with similar format as robomimic data
-
-There is an additional field of attributes in data['demo_x'].attrs['label'] that stores the mode of the episode
-
-To relabel the data, take a look at scripts/relabel_hdf5.py.
-
-World Model needs one single hdf5 files with all rollouts and VLM finetuning needs two hdf5 that splits into train.hdf5 and test.hdf5. To split the hdf5, you can use scripts/split_hdf5.py
-
-To compute the norm dict of the actions and states for normalization, use scripts/compute_norm_dict.py that saves a dictionary json file in the data folder that can be loaded for world model data processing.
-
-
-# training WM 
-## create the customized data loading function
-In model_based_irl_torch/dreamer/tools.py, create a copy of fill_expert_dataset_real_data_example function and add your data processing to load the data into a buffer. Also modify the get_real_dataset_path_and_env_meta function to specify your own data path for the hdf5 files. After modification, change the corresponding function call in train_wm_real_data.py to load the data 
-
-## loading the dataset
- Write a new fill_expert_dataset function in dreamer/tools.py to load your own offline data to train the model.
-
- You can take a look at existing fill_expert_dataet and fill_expert_dataset_robomimic for reference
-
-## change the config 
-take a look at the configs/wm_example_config.yaml to check the parameters. Change the experiment name and other parameters in the config.
-## parameters in config
-```obs_keys```: a list of keys for camera view name to access through observation
-
-```state_keys```: a list of state keys including robot pos, quat, gripper 
-
-```priv_dim```: the dimension of the priviledged states (currently it is robot pos + quat + gripper + object pos)
-
-```num_exp_trajs```: the number of demos used for training
-
-```validation_mse_traj```: the number of demos used for evaluation
-
-```root_dir```: directory of your dataset, the actual dataset path is (root_dir/task). You can add a function in common/utils.py to customize the dataset path depending on the env (e.g. get_robocasa_dataset_path_and_env_meta)
-
-```task```: name of your env
-
-```batch_length```: the horizon of the trajectory snippets, for longer temporal context, increase this
-
-
-After training, change the parameter ```from_ckpt``` in config file to load the checkpoint
-
-```
-python scripts/train_wm_real_data.py --config_path wm_example_config.yaml
+conda activate latent
 ```
 
-# VLM finetuning
-## code structure for VLM 
-vlm/llama-recipes is the VLM source code
+---
 
-vlm/llama-recipse/recipes/quickstart/finetuning/datasets: folder to save the data for finetuning script.
+## 📦 Prepare Datasets
 
-## cutomize the data for a task
-1. create a folder under datasets, {task_name}_data
-2. put train.hdf5 and test.hdf5 in the folder and create questions.json and answers.json
-3. questions.json contains the key-value pair for different kinds of questions you want VLM to answer. For generating one sentence behaivor description, use "open-word" key to access the prompt template
-4. answers.json stores the supervised answer to finetuning the model to match the output. In "open-word", it contains a variation of 15 sentences for each category of behavior. During training, one answer is randomly sampled from those 15 variations to prevserve the LLM's linguistic diversity.
-5. Create a {task_name}_dataset_latent.py and customize the _generate_examples function that specifies how each prompt template in questions.json is converted to the model's input. It also has similar processing of data to world model because it also needs to preprocess data for world model's prediction too.
+### Option 1: Download the provided datasets (recommended)
 
-## finetuning wm
-1. take a look at the llama-recipes/src/llama-recipes/finetuning_wm.py (don't need to change this file)
-2. there are some example bash scripts to launch the training, llama-recipes/run_exp_bag.sh, change the dataset related argument to your customized task
-3. In llama-recipes/recipes/quickstart/inference/local_inference/llama_wm_infer.py, it runs the evaluation of the model on test.hdf5. 
-4. To run the inference, you can run the following command, change the peft_model_name to the checkpoint of your model and change customized dataset accordingly
-```
- CUDA_VISIBLE_DEVICES=1 python recipes/quickstart/inference/local_inference/llama_wm_infer.py --temperature 0.7 --top_p 0.9 --dataset "custom_dataset" --custom_dataset.file "recipes/quickstart/finetuning/datasets/realfork_dataset_latent.py" --custom_dataset.data_path "realfork_data" --custom_dataset.answer_type "open-word" --custom_dataset.num_images 16 --custom_dataset.sample_size 16 --custom_dataset.num_history_images 1 --custom_dataset.imagined_steps 63 --custom_dataset.latent_mode "all"  --model_name "mllama/Llama-3.2-11B-Vision-Instruct/custom" --batch_size_training 10 --custom_dataset.test_split "test" --custom_dataset.start_index 60 --peft_model_name /data/finetuned_models/run_02_21_custom_wm_150k_vlm_finetuning_0.2%_imagined_step63_1_history_16sample_size_fork_task_open-word-fork-all_18epoch_print_eval_metrics_3class_aug_failure_by2_shuffle_key_correct_prompt_hist_no_start_from_75/peft_checkpoint_18 --use_sentence True
-```
-5. In src/llama-recipes/models/mllama_model.py, it has the modified the VLM that replaces the original vision encoder with the world model's latent states. There are two functions to call world model to generate latent states
+#### ✅ World Model data (WM data)
 
-The first one is to generate imagined latents (which is only having current observations and future action sequences to infer future states)
-``` 
-batch_embeds = self.wm_model._wm.get_latent(dict, mode=self.latent_mode, imagined_steps=self.imagined_steps, actual_lengths= actual_lengths, sample_size = self.sample_size, total_steps=self.num_images)
+We provide WM data on Hugging Face: https://huggingface.co/datasets/yilin-wu/Forewarn_WM_data
+
+Download and save under `/data/wm_data`:
+
+```bash
+huggingface-cli download yilin-wu/Forewarn_WM_data   --local-dir /data/wm_data   --repo-type dataset
 ```
 
-The second one is to generate groundtruth latents (which is encoding the ground truth observations for the future steps into latents). This one is defaultly not in use but if you want to compare the performance according to ground truth observations, you can uncomment this line. 
+> If you change the local directory, also update `root_dir` in the YAML config(s) under [`configs/`](./configs/).
+
+#### ✅ VLM dataset (VLM data)
+
+Please follow **[`vlm/README.md`](./vlm/README.md)** for VLM dataset downloading and placement.
+
+---
+
+### Option 2: Create your own dataset
+
+In our experiments, we use **two sources**:
+- ~100 demonstrations
+- ~200 policy rollouts
+
+#### Data format
+
+- Save rollouts + demonstrations into an **HDF5** file with a format similar to RoboMimic.
+- Add an additional attribute field:
+  - `data['demo_x'].attrs['label']` stores the **mode** of the episode.
+
+#### Helpful scripts
+
+- 🔁 Relabel after creation: [`scripts/relabel_hdf5.py`](./scripts/relabel_hdf5.py)
+- ✂️ Split into train/test for VLM finetuning: [`scripts/split_hdf5.py`](./scripts/split_hdf5.py)
+- 📏 Compute normalization stats (state/action): [`scripts/compute_norm_dict.py`](./scripts/compute_norm_dict.py)  
+  Saves a JSON file in the data folder used for WM preprocessing.
+
+#### Hooking in your dataset loader
+
+To load custom data properly:
+
+1) Add a dataset fill function (similar to `fill_expert_dataset_real_data`) in:  
+   [`model_based_irl_torch/dreamer/tools.py`](./model_based_irl_torch/dreamer/tools.py)
+
+2) Add a dataset path + env meta resolver (similar to `get_real_dataset_path_and_env_meta`) in:  
+   [`model_based_irl_torch/common/utils.py`](./model_based_irl_torch/common/utils.py)
+
+3) Update the corresponding function call inside:  
+   [`scripts/train_wm_real_data.py`](./scripts/train_wm_real_data.py)
+
+---
+
+## 🌍 World Model Training
+
+### Reproduce tasks from the paper
+
+You can load configs from [`configs/`](./configs/) and train from scratch:
+
+- ☕ Cup:
+```bash
+python scripts/train_wm_real_data.py --config_path wm_cup_config.yaml
 ```
-# batch_embeds = self.wm_model._wm.get_latent_gt(dict, mode=self.latent_mode, imagined_steps=self.imagined_steps, actual_lengths= actual_lengths, sample_size = self.sample_size, total_steps=self.num_images)
+
+- 👜 Bag:
+```bash
+python scripts/train_wm_real_data.py --config_path wm_bag_config.yaml
 ```
 
+- 🍴 Fork:
+```bash
+python scripts/train_wm_real_data.py --config_path wm_fork_config.yaml
+```
+
+### Evaluate world model quality (video rollouts)
+
+After training, evaluate video quality by loading checkpoints via `from_ckpt` in the YAML config.
+The evaluation logic is in the `evaluate` function inside:  
+[`scripts/train_wm_real_data.py`](./scripts/train_wm_real_data.py)
+
+### Download pretrained world model checkpoints (optional)
+
+We provide pretrained checkpoints on Hugging Face: https://huggingface.co/yilin-wu/Forewarn_WMs
+
+Download them into `logs/dreamer_cont/`, then set `from_ckpt` in your config file to point to the downloaded checkpoint:
+
+- Cup example:
+  - `from_ckpt: /path_to_project/logs/dreamer_cont/cup_ckpt/1229/222731/pretrain_joint.pt`
+- Bag example:
+  - `from_ckpt: /path_to_project/logs/dreamer_cont/bag_ckpt/0106/234547/pretrain_joint_150000.pt`
+- Fork example:
+  - `from_ckpt: /path_to_project/logs/dreamer_cont/fork_ckpt/0127/215329/pretrain_joint_150000.pt`
+
+---
+
+## 🧪 Train on Your Own Task (World Model)
+
+1) Start from an existing config (e.g., [`configs/wm_cup_config.yaml`](./configs/wm_cup_config.yaml)) and modify:
+- `task` (your env/task name)
+- `root_dir` (dataset root directory)
+- `obs_keys` (camera views)
+- `state_keys` (robot states, gripper states)
+- `batch_length` (temporal horizon of snippets; increase for longer context)
+- `num_exp_trajs`, `validation_mse_traj` (train/eval trajectories)
+- experiment name/output directories
+
+2) Train:
+```bash
+python scripts/train_wm_real_data.py --config_path <your_config.yaml>
+```
+
+3) After training, set:
+- `from_ckpt: <path_to_checkpoint>`
+to evaluate or continue training.
+
+---
+
+## 🦙 VLM Finetuning + Inference
+
+Please see **[`vlm/README.md`](./vlm/README.md)** for:
+- VLM base model download
+- VLM dataset download
+- finetuning scripts
+- inference commands (Stage 1 / Stage 2)
+
+---
 
 
+##  🌟 Policy Inference
+We also provide a simplified examples for integrating world model and VLM for policy inference. Please see **[`examples`](./examples/)**.
+- wm_pred_fork.py is an example to load the world model and vlm togehter and create a class called VLMInference
+- policy_loop.py is an example to create a policy loop where it takes samples from the diffusion policy and pass in those action samples into VLMInference and gets the selected action sample to execute. 
 
+In order to get complete exeuction of policy inference, you need to integrate this with your real robot controller and your base policy code to get action samples and observations to pass in. 
 
+## 📚 Citation
 
+If you find this work useful, please cite:
 
-
+```bibtex
+@article{wu2025forewarn,
+  title={From Foresight to Forethought: VLM-In-the-Loop Policy Steering via Latent Alignment},
+  author={Wu, Yilin and Tian, Ran and Swamy, Gokul and Bajcsy, Andrea},
+  journal={arXiv preprint arXiv:2502.01828},
+  year={2025}
+}
+```
