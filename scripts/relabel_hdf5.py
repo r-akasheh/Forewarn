@@ -16,7 +16,6 @@ def update_demo_label(hdf5_file_path, demo_index, output_file):
     """
     with h5py.File(hdf5_file_path, 'r') as file:
         demo_key = f'demo_{demo_index}'
-        # labels = [2,0,5,0,2,1,1,6,1,1,2,2,5,2,0,6,3,1,3]
         if demo_key not in file['data']:
             print(f"Demo {demo_key} not found in the HDF5 file.")
             return
@@ -24,9 +23,6 @@ def update_demo_label(hdf5_file_path, demo_index, output_file):
         # Access the 120th image in the wrist camera view
         try:
             length = len(file['data'][demo_key]['obs']['cam_wrist_view_image'])
-            # if len(file['data'][demo_key]['obs']['cam_wrist_view_image'])< 130:
-                # image_data = file['data'][demo_key]['obs']['cam_wrist_view_image'][-1]
-            # else:
             image_data = file['data'][demo_key]['obs']['cam_wrist_view_image']
             front_view_data = file['data'][demo_key]['obs']['cam_front_view_image']
             if 'label' in file['data'][demo_key].attrs:
@@ -40,12 +36,6 @@ def update_demo_label(hdf5_file_path, demo_index, output_file):
             print(f"IndexError: {e}")
             return
 
-        # Convert the image data to a format suitable for OpenCV rendering
-        # if demo_index <= len(labels):
-            # new_label = labels[demo_index-1]
-        # if demo_index not  in [178, 179]:
-            # return 
-        # else: 
         output_label = output_file['data'][demo_key].attrs['label']
         if  output_label== 4:
             for i in range(length):
@@ -66,41 +56,16 @@ def update_demo_label(hdf5_file_path, demo_index, output_file):
             key = input("input number...")
             # key = cv2.waitKey(0)
             # Map key inputs to labels
-            # if key in [ord('0'), ord('1'), ord('2'), ord('3'), ord('4'), ord('5'), ord('6'), ord('7'), ord('8'), ord('9')]:
+         
             
             if key in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
                 new_label = int(key)
                 output_file['data'][demo_key].attrs['label'] = new_label
-            # new_label = labels[demo_index-1]
-                # print(f"Updated label for {demo_key} to {new_label}.")
-            # else:
-                # print("Invalid input", key)
-                # print("Invalid input. Label not updated.")
-                # print(f"Current label for {demo_key} is {label}.")
-                # new_label = label
+ 
 
             # Close the OpenCV window
             cv2.destroyAllWindows()
-        # new_label = demos_labels[demo_index]
-        # # Copy the demo data to the new file and update the label
-        # if demo_key not in output_file['data']:
-        #     output_file['data'].create_group(demo_key)
-        # for key, value in file['data'][demo_key].items():
-        #     # file.copy(value, output_file['data'][demo_key], name=key) 
-        #     # del output_file['data'][demo_key][key]
-        #     if key in output_file['data'][demo_key].keys():
-        #         del output_file['data'][demo_key][key]
-        #         print(key)
-        #     if key != 'obs':
-        #         output_file['data'][demo_key][key] = value[:new_label]
-        #     else:
-        #         output_file['data'][demo_key].create_group('obs')
-        #         for subkey in value.keys():
-        #             output_file['data'][demo_key][key].create_dataset(subkey, data=value[subkey][:new_label])
-        # ## also copy the attributes
-        # for key, value in file['data'][demo_key].attrs.items():
-        #     output_file['data'][demo_key].attrs[key] = value
-        # # output_file['data'][demo_key].attrs['label'] = new_label
+       
 
 def update_demo_length (hdf5_file_path, demo_index, output_file):
   
@@ -128,24 +93,7 @@ def update_demo_length (hdf5_file_path, demo_index, output_file):
         if demo_key not in output_file['data']:
             output_file['data'].create_group(demo_key)
         for key, value in file['data'][demo_key].items():
-            # if key in output_file['data'][demo_key].keys():
-                # del output_file['data'][demo_key][key]
             
-            # if demo_index <= 100:
-            #     file.copy(value, output_file['data'][demo_key], name=key)
-            # else:
-                
-            #     cut_length = 160
-            #     start_index = 0
-            #     if demo_index == 134:
-            #         cut_length = 200
-            #         start_index = 99
-            #     if demo_index == 142:
-            #         start_index = 46
-            #         cut_length = 160
-            #     if demo_index in [178, 179]:
-            #         start_index = 90
-            #         cut_length = 170
                 if key != 'obs':
                     # Copy the first 160 elements for non-'obs' keys
                     # output_file['data'][demo_key][key] = value[start_index:cut_length]
@@ -162,8 +110,7 @@ def update_demo_length (hdf5_file_path, demo_index, output_file):
         # Also copy the attributes
         for key, value in attrs_dict.items():
             output_file['data'][demo_key].attrs[key] = value
-        # for key, value in file['data'][demo_key].attrs.items():
-        #     output_file['data'][demo_key].attrs[key] = value
+
 
 def main(hdf5_file_path, output_file_path):
     """

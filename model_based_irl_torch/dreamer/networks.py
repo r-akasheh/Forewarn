@@ -1103,6 +1103,6 @@ class RandomShiftsAug(nn.Module):
                 shifted = shifted.reshape(B, -1, *shifted.shape[1:])  # (B, T, H, W, C)
             else:
                 shifted = shifted.permute(0, 2, 3, 1)
-            # print("Output shape (B, H, W, C)", shifted.shape)
+            
 
         return shifted

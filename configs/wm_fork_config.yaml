@@ -20,16 +20,7 @@ defaults:
   precision: 32
   debug: False
   video_pred_log: True
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1018/192534/pretrain_joint.pt #1005/005036/pretrain_joint.pt #null
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1014/173220/pretrain_joint.pt #1005/005036/pretrain_joint.pt #null
-  # from_ckpt: /home/kensuke/latent-safety/logs/dreamer_cont/0922/030257/best_pretrain_joint_0_36.pt #/home/kensuke/latent-safety/logs/dreamer_cont/0921/151810/best_pretrain_joint_0_33.pt #/home/kensuke/latent-safety/logs/dreamer_cont/0920/102553/best_pretrain_joint_0_18.pt  #/home/kensuke/latent-safety/logs/dreamer_cont/0918/110223/best_pretrain_joint_0_13.pt #/home/kensuke/latent-safety/logs/dreamer_cont/0915/045150/best_pretrain_joint_0_14.pt
-  # lx_ckpt: /home/kensuke/latent-safety/logs/dreamer_cont/0922/030257/best_classifier_0_01.pt #/home/kensuke/latent-safety/logs/dreamer_cont/0921/151810/best_classifier_0_01.pt #/home/kensuke/latent-safety/logs/dreamer_cont/0920/150347/best_classifier_0_03.pt #/home/kensuke/latent-safety/logs/dreamer_cont/0918/175717/classifier.pt
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1205/005707/pretrain_joint.pt #null
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1211/013853/pretrain_joint.pt #null
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1218/220106/pretrain_joint.pt #null
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1218/220748/pretrain_joint.pt #null
-  # from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/1226/163754/pretrain_joint.pt #null
-  from_ckpt: /home/yilin/Projects/failure_detection/logs/dreamer_cont/0127/215329/pretrain_joint_150000.pt #150000 null
+  from_ckpt: null #/home/yilin/Projects/failure_detection/logs/dreamer_cont/0127/215329/pretrain_joint_150000.pt #150000 null
 
 
 
@@ -53,7 +44,7 @@ defaults:
   # Robomimic data
   root_dir: '/data/wm_data'
 
-  exp_name: 'wm_real_cup'
+  exp_name: 'wm_real_fork'
   image_size: 64 #64
 
   shape_rewards: True
@@ -61,31 +52,25 @@ defaults:
   multi_task_data: False
   num_exp_trajs: 300 #100 #100 #100 #100 #90 #90 #90
   obs_keys: ["cam_front_view_image",
-              #  "robot0_agentview_left_image",
-            #  "robot0_agentview_right_image",
+         
             "cam_wrist_view_image",]
-  state_keys: [ #['object-state', # 28, 
-              #  [    'robot0_eef_pos', # 3
-                  #  'robot0_eef_quat', # 4
-                    #  'robot0_gripper_qpos', # 2
+  state_keys: [ 
                     'state', # 8
   ]
   action_space: [8]
+  action_type: 'abs'
   observation_space: {
     'cam_wrist_view_image': [64, 64,3],
     'cam_front_view_image': [64, 64,3],
-    # 'robot0_eef_pos': [3],
-    # 'robot0_eef_quat': [4],
-    # 'robot0_gripper_qpos': [2],
+
     'state': [8],
-    # 'privileged_state': [3],
     'discount': [1],
   }
   # priv_dim: 3 #12
   # Pretraining
   pretrain_bc_loss_only: True
   pretrain_separately: False
-  pretrain_joint_steps: 100000 #40000
+  pretrain_joint_steps: 150000 #40000
   pretrain_annealing: null
   pretrain_actor_steps: 0
   pretrain_loss: 'ce'  # 'mse' or 'ce'
@@ -157,7 +142,7 @@ defaults:
   bc_reg_wd: 1.0           # weight decay factor for BC-loss (1.0 for no decay)
 
   # Environment
-  task: 'GraspCup'
+  task: 'GraspFork'
   size: [128, 128]
   envs: 1
   action_repeat: 1
@@ -198,9 +183,9 @@ defaults:
   weight_decay: 0.0
   unimix_ratio: 0.01
   initial: 'learned'
-  sample_freq: 2
+  sample_freq: 1
   # Training
-  wandb_name: 'wm_real_cup_bs_16_bl_64_eps_300'
+  wandb_name: 'wm_real_fork_bs_16_bl_64_eps_300'
   batch_size: 16 #32
   batch_length: 64 #64 #16 #32
   train_ratio: 1024
@@ -212,87 +197,9 @@ defaults:
   grad_clip: 1000
   dataset_size: 1000000
   opt: 'adam'
-
-  # Behavior.
   discount: 0.997
   discount_lambda: 0.95
-  imag_horizon: 15
-  imag_gradient: 'dynamics'
-  imag_gradient_mix: 0.0
-  eval_state_mean: False
 
-  # Exploration
-  expl_behavior: 'greedy'
-  expl_until: 0
-  expl_extr_scale: 0.0
-  expl_intr_scale: 1.0
-  disag_target: 'stoch'
-  disag_log: True
-  disag_models: 10
-  disag_offset: 1
-  disag_layers: 4
-  disag_units: 400
-  disag_action_cond: False
 
-  doneType: toEnd
-  costType: sparse
-  randomSeed: 0
-  consRadius: 0.5
-  targetRadius: 0.5
-  turnRadius:  0.8 #1/1.25
-  speed: 1
-  warmup: true
-  warmupIter: 500
-  maxUpdates: 400000
-  updateTimes: 20
-  memoryCapacity: 10000
-  checkPeriod: 10000
 
-  annealing: null
-  architecture: [100, 100]
-  learningRate: 1e-3
-  gamma: 0.9999
-  actType: Tanh
-  mode: RA
-  terminalType: g
-  showTime: null
-  name: 'world_model_new'
-  outFolder: logs/experiments
-  plotFigure: null
-  storeFigure: True
-  learnedMargin: null
-  learnedDyn: null
-  image: null
-  wm: True
-  gt_lx: False
-  # num datapts for training encoder, transition, classifier
-  num_pts: 5000
-  num_actions: 3
 
-  #lx_path: /home/kensuke/latent-safety/logs/classifier/failure_set.pth
-  #lx_img_path: /home/kensuke/latent-safety/logs/classifier_img/failure_set_img.pth
-  #dyn_path: /home/kensuke/latent-safety/logs/dynamics/dynamics.pth
-  #dyn_img_path: /home/kensuke/latent-safety/logs/dynamics_img/dynamics_img.pth
-  #enc_img_path: /home/kensuke/latent-safety/logs/dynamics_img/encoder_img.pth
-  #dyn_img_inv_path: /home/kensuke/latent-safety/logs/dynamics_img_inv/dynamics_img.pth
-  #enc_img_inv_path: /home/kensuke/latent-safety/logs/dynamics_img_inv/encoder_img.pth
-  #dyn_img_data: /home/kensuke/latent-safety/datasets/dyn_data.pkl
-  #lx_img_data: /home/kensuke/latent-safety/datasets/classifier_data.pkl
-  grid_path: /home/kensuke/latent-safety/logs/grid/LS_BRT_v1_w1.25.npy
-  # HJ computation bounds
-  x_min: -1.1
-  x_max: 1.1
-  y_min: -1.1
-  y_max: 1.1
-  dt: 0.05
-  numT: 25
-  nx: 51
-  ny: 51
-  nz: 51
-
-  obs_x: 0
-  obs_y: 0
-  obs_r: 0.5
-
-  # Dubins car parameters
-  u_max: 1.25

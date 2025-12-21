@@ -30,8 +30,7 @@ def split_hdf5_file(args):
         remaining_keys = selected_keys[0].tolist() + selected_keys[1].tolist() + selected_keys[2].tolist()
         ## the left keys not in remaining keys are in train_keys 
         train_keys = [key for key in keys if key not in remaining_keys]
-        # train_keys = keys[:split_point]
-        # remaining_keys = keys[split_point:]
+      
         
         # Create the 'train.hdf5' file and copy the first 300 demos
         label_count = {0: 0, 1: 0, 2: 0}
