@@ -9,21 +9,21 @@ We **remove the original vision encoder** and instead **project world-model (WM)
 
 The main code lives in `llama-recipes/`:
 
-- 🧩 **Llama Recipes**: [`llama-recipes/`](./llama-recipes/)  
+- 🧩 **Llama Recipes**: [`llama-recipes/`](https://github.com/CMU-IntentLab/llama-recipes/tree/5f0fddf9a89ea638f027324f08a02f149e267426)  
   Scripts and utilities related to Llama VLM training/inference.
 
-- 📦 **Datasets**: [`recipes/quickstart/finetuning/datasets/`](./llama-recipes/recipes/quickstart/finetuning/datasets)  
+- 📦 **Datasets**: [`recipes/quickstart/finetuning/datasets/`](https://github.com/CMU-IntentLab/llama-recipes/tree/5f0fddf9a89ea638f027324f08a02f149e267426/recipes/quickstart/finetuning/datasets)  
   Place the datasets for **cup / bag / fork** tasks here, along with the dataset-loading code.
 
-- 🧠 **Model**: [`mllama_model.py`](./llama-recipes/src/llama_recipes/models/mllama_model.py)  
+- 🧠 **Model**: [`mllama_model.py`](https://github.com/CMU-IntentLab/llama-recipes/tree/5f0fddf9a89ea638f027324f08a02f149e267426/src/llama_recipes/models/mllama_model.py)  
   Modified Llama model that:
   - removes the original vision encoder
   - projects WM latents into the LLM language embedding space
 
-- 🔥 **Training**: [`finetuning_wm.py`](./llama-recipes/src/llama_recipes/finetuning_wm.py)  
+- 🔥 **Training**: [`finetuning_wm.py`](https://github.com/CMU-IntentLab/llama-recipes/tree/5f0fddf9a89ea638f027324f08a02f149e267426/src/llama_recipes/finetuning_wm.py)  
   Script to run finetuning.
 
-- 🔎 **Inference**: [`llama_wm_infer.py`](./llama-recipes/recipes/quickstart/inference/local_inference/llama_wm_infer.py)  
+- 🔎 **Inference**: [`llama_wm_infer.py`]([./llama-recipes](https://github.com/CMU-IntentLab/llama-recipes/tree/5f0fddf9a89ea638f027324f08a02f149e267426/recipes/quickstart/inference/local_inference/llama_wm_infer.py)  
   Script to run inference for:
   - behavior description generation (Stage 1)
   - behavior selection (Stage 2)
