@@ -67,7 +67,7 @@ cd Forewarn
 **create env + pip install**
 ```bash
 conda env create -f environment.yaml
-conda activate forewarn
+conda activate dreamer
 pip install -r requirements.txt
 ```
 **install dreamer wm**
