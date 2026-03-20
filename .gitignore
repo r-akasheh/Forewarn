@@ -11,3 +11,5 @@ scripts/wandb/*
 *pyc*
 *vscode*
 __pycache__
+data/*
+.idea/*

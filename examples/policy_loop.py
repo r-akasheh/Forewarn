@@ -13,7 +13,7 @@ class ManimoLoop:
     def __init__(self, configs=None, callbacks=[], T=2000, mode = 'eval', wm_config= None, logdir=None, answer_type = 'snippet', steering_mode = 'vlm'):
         self.callbacks = callbacks
         self.wm_predictor = WMPredictor(wm_config)
-        if steering_mode == 'vlm' 
+        if steering_mode == 'vlm':
             peft_model = '/data/peft_models/run_02_21_custom_wm_150k_vlm_finetuning_0.2%_imagined_step63_1_history_16sample_size_fork_task_open-word-fork-all_18epoch_print_eval_metrics_3class_aug_failure_by2_shuffle_key_correct_prompt_hist_no_start_from_75/peft_checkpoint_18'
 
             model_name =  '/data/mllama/Llama-3.2-11B-Vision-Instruct/custom'
