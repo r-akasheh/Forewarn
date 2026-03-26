@@ -243,7 +243,7 @@ def merge_two_cache_dicts(cache1, cache2):
 
 def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None):
     env_name = config.task.split("_", 1)[0]
-    sample_freq = config.sample_freq
+    sample_freq = config.sample_freq if hasattr(config, 'sample_freq') else 1
     selected_obs_keys = config.obs_keys
   
     env_names = [env_name]
@@ -267,15 +267,26 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
         ## get the dir of dataset_path
         dataset_dir = os.path.dirname(dataset_path)
         # read the norm_dict
-        with open(os.path.join(dataset_dir, f'norm_dict_{config.action_type}.json'), 'r') as file:
-            norm_dict = json.load(file)
-        ## make the values of the norm_dict to be np.array
-        for key in norm_dict.keys():
-            norm_dict[key] = np.array(norm_dict[key])
+        try:
+            with open(os.path.join(dataset_dir, f'norm_dict_{getattr(config, "action_type", "delta")}.json'), 'r') as file:
+                norm_dict = json.load(file)
+            ## make the values of the norm_dict to be np.array
+            for key in norm_dict.keys():
+                norm_dict[key] = np.array(norm_dict[key])
+        except FileNotFoundError:
+            norm_dict = None
         
-        demos = list(f["data"].keys())
-        inds = np.argsort([int(elem[5:]) for elem in demos])
-        demos = [demos[i] for i in inds]
+        # Iterate over all top-level keys as demos if 'data' is not present
+        if "data" in f:
+            demos = list(f["data"].keys())
+        else:
+            demos = [k for k in f.keys() if 'demo' in k]
+            
+        try:
+            inds = np.argsort([int(elem.split('_')[-1]) for elem in demos])
+            demos = [demos[i] for i in inds]
+        except Exception:
+            pass
         
         
         # if is_val_set, we don't fill the first num_exp_trajs which are used for training
@@ -297,19 +308,37 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
             else config.num_exp_trajs
         )
        
-        obs_keys = f['data'][demos[0]]['obs'].keys()    
-        pixel_keys = sorted([key for key in obs_keys if "image" in key and key in selected_obs_keys])
+        if "data" in f:
+            obs_keys = list(f['data'][demos[0]]['obs'].keys())
+        else:
+            obs_keys = list(f[demos[0]]['obs'].keys())
+
+        pixel_keys = sorted([key for key in obs_keys if "cam" in key or "image" in key])
+        pixel_keys = [k for k in pixel_keys if k in selected_obs_keys] or pixel_keys # default to all if none selected
        
         state_keys = config.state_keys
         
         # Initialize norm_dict if it is None
         if norm_dict is None:
             # Read ob_dim and ac_dim from the first datapoint in the first demo
-            first_demo = f["data"][demos[0]]
+            first_demo = f["data"][demos[0]] if "data" in f else f[demos[0]]
             ob_dim = 0
             for key in state_keys:
-                ob_dim += np.prod(first_demo["obs"][key].shape[1:])
-            ac_dim = first_demo["actions"].shape[1]
+                if key in first_demo["obs"]:
+                    ob_dim += np.prod(first_demo["obs"][key].shape[1:])
+            
+            # support fallback to plain `actions` if `actions_abs` doesn't exist
+            action_key_fallback = "actions_abs" if "actions_abs" in first_demo else "actions"
+            
+            if 'obs' in first_demo and action_key_fallback in first_demo['obs']:
+                ac_dim = first_demo['obs'][action_key_fallback].shape[1]
+            else:
+                act = first_demo[action_key_fallback]
+                # handle (N, 1, 7) shaped actions
+                if len(act.shape) > 2 and act.shape[1] == 1:
+                    ac_dim = act.shape[2]
+                else:
+                    ac_dim = act.shape[1]
 
             print(f"Initizalizing norm_dict with ob_dim={ob_dim} and ac_dim={ac_dim}")
             norm_dict = {
@@ -318,34 +347,49 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
                 "ac_max": -np.inf * np.ones(ac_dim, dtype=np.float32),
                 "ac_min": np.inf * np.ones(ac_dim, dtype=np.float32),
             }
-        origin_shape = list(f["data"][demos[0]]["actions_abs"].shape[1:])
+            
+        first_demo = f["data"][demos[0]] if "data" in f else f[demos[0]]
+        action_key_fallback = "actions_abs" if "actions_abs" in first_demo else "actions"
+        
+        if 'obs' in first_demo and action_key_fallback in first_demo['obs']:
+            origin_shape = list(first_demo['obs'][action_key_fallback].shape[1:])
+        else:
+            act = first_demo[action_key_fallback]
+            if len(act.shape) > 2 and act.shape[1] == 1:
+                origin_shape = list(act.shape[2:])
+            else:
+                origin_shape = list(act.shape[1:])
         
         action_space = Box(-1, 1, shape = tuple(origin_shape))
-        first_demo = f["data"][demos[0]]
        
         # Set state_dim and action_dim
         if state_dim is None:
             state_dim = 0
             for key in state_keys:
-                state_dim += np.prod(first_demo["obs"][key].shape[1:])
+                if key in first_demo["obs"]:
+                    state_dim += np.prod(first_demo["obs"][key].shape[1:])
 
         if action_dim is None:
-            ## remove the last base + mode action because it is not used in the policy 
-            ## pos: 3dim, axis_angle: 3dim, gripper: 1dim, base: 4 dim, mode: 1 dim
-            
-            action_dim = first_demo["actions_abs"].shape[1]             
+            action_dim = origin_shape[0]             
         obs_space = {}
-        if config.action_type == 'delta':
+        
+        action_type = getattr(config, "action_type", "delta")
+        if action_type == 'delta':
             action_key = "actions"
-        elif config.action_type == 'abs':
+        elif action_type == 'abs':
             action_key = "actions_abs"
         else: 
             raise ValueError('action_type should be either delta or abs')
+            
+        if action_key not in first_demo:
+            # fallback
+            action_key = action_key_fallback
         
         for key in pixel_keys:
-            obs_space[key] = Box(0, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
+            obs_space[key] = Box(0, 1, shape = first_demo["obs"][key].shape[1:])
         for key in state_keys:
-            obs_space[key] = Box(-1, 1, shape = f["data"][demos[0]]["obs"][key].shape[1:])
+            if key in first_demo["obs"]:
+                obs_space[key] = Box(-1, 1, shape = first_demo["obs"][key].shape[1:])
         obs_space['is_terminal'] = Discrete(2)
         obs_space['is_first'] = Discrete(2)
         obs_space['is_last'] = Discrete(2)
@@ -368,8 +412,12 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
                 print('last demo index', demos[i])
                 break
 
-            traj = f["data"][demo]
-            label = f["data"][demo].attrs['label']
+            traj = f["data"][demo] if "data" in f else f[demo]
+            if 'label' in traj.attrs:
+                label = traj.attrs['label']
+            else:
+                label = 1 if traj.attrs.get('is_success', False) else 0
+
             # Concat state keys to create "state" key
             concat_state = []
             for t in range(len(traj["obs"][pixel_keys[0]])):

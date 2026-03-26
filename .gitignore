@@ -13,3 +13,5 @@ scripts/wandb/*
 __pycache__
 data/*
 .idea/*
+*.json
+*.safetensors
