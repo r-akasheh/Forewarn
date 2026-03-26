@@ -39,7 +39,7 @@ def get_real_dataset_path_and_env_meta(
     env_id,
     done_mode = 0
 ):
-    dataset_path = Path(config.root_dir,  f"{env_id}_data/{env_id}_demo.hdf5")
+    dataset_path = Path(config.root_dir, config.success_data)
     # env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
     return dataset_path, None
 

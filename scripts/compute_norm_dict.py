@@ -2,6 +2,8 @@ import h5py
 import numpy as np
 import json
 import os 
+import tqdm
+
 def get_min_max_actions(file_path):
     """
     Computes the min and max values across all 'actions', 'actions_abs', and 'state'
@@ -15,19 +17,23 @@ def get_min_max_actions(file_path):
         dict: Contains min and max values for 'actions', 'actions_abs', and 'state'.
     """
     with h5py.File(file_path, 'r') as file:
-        data = file['data']
+        if 'data' in file:
+            data = file['data']
+            demos = list(data.keys())
+        else:
+            data = file
+            demos = [k for k in file.keys() if 'demo' in k]
+
         all_actions = []
         all_actions_abs = []
         all_states = []
 
-        # Loop over all demo keys
-        for key in data.keys():
-            print('key', key)
+        for demo in tqdm.tqdm(demos):
+            demo_data = data[demo]
             
-            actions = data[key]['actions'][:]
-            actions_abs = data[key]['actions_abs'][:]
-            print('actions_abs', np.max(actions_abs, axis=0))
-            state = data[key]['obs']['state'][:]
+            actions = demo_data['actions'][:]
+            actions_abs = demo_data['actions_abs'][:]
+            state = demo_data['obs']['state'][:]
 
             all_actions.append(actions)
             all_actions_abs.append(actions_abs)
@@ -59,20 +65,18 @@ def get_min_max_actions(file_path):
             'ac_min': actions_abs_min,
             'ac_max': actions_abs_max
         }
-        output_file = os.path.join(os.path.dirname(file_path), 'norm_dict_abs.json')
+        
+        output_file_abs = os.path.join(os.path.dirname(file_path), 'norm_dict_abs.json')
         # Save to a JSON file
-        with open(output_file, 'w') as json_file:
+        with open(output_file_abs, 'w') as json_file:
             json.dump(norm_dict_abs, json_file)
-        output_file = os.path.join(os.path.dirname(file_path), 'norm_dict_delta.json')
-        with open(output_file, 'w') as json_file:
+            
+        output_file_delta = os.path.join(os.path.dirname(file_path), 'norm_dict_delta.json')
+        with open(output_file_delta, 'w') as json_file:
             json.dump(norm_dict_delta, json_file)
-    return 
-    # return norm_dict
 
-# Example usage:
-# file_path = 'your_file.hdf5'
-# norm_dict = get_min_max_actions(file_path)
-# print(norm_dict)
+    return
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
