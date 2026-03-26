@@ -8,3 +8,6 @@
 [submodule "vlm/llama-recipes"]
 	path = vlm/llama-recipes
 	url = https://github.com/CMU-IntentLab/llama-recipes.git
+[submodule "manimo"]
+	path = manimo
+	url = https://github.com/AGI-Labs/manimo.git
