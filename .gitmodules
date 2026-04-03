@@ -8,6 +8,7 @@
 [submodule "vlm/llama-recipes"]
 	path = vlm/llama-recipes
 	url = git@github.com:r-akasheh/llama-recipes.git
+	branch = no-rgb
 [submodule "manimo"]
 	path = manimo
 	url = https://github.com/AGI-Labs/manimo.git

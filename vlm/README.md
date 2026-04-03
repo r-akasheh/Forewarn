@@ -183,9 +183,81 @@ CUDA_VISIBLE_DEVICES=0 python recipes/quickstart/inference/local_inference/llama
 
 ---
 
-## 🧯 Common Gotchas
+## Custom StackCube WM-Latent Data (No Download)
 
-- Confirm `--peft_model_name` points to the correct `*_ckpt` directory on your machine.
-- If you relocate datasets/models, update paths in both:
-  - `run_exp_*.sh`
-  - inference commands above
+If you already have your own files:
+
+- `data_wm_latent_train.h5`
+- `data_wm_latent_test.h5`
+- `question.json` (or `questions.json`)
+- `answers.json`
+
+place them in one folder, for example:
+
+`/home/rakasheh/master/cassandra/maniskill/data`
+
+### 1) Recompute normalization for combined WM-latent data
+
+```bash
+python /home/rakasheh/master/cassandra/safety/forewarn/scripts/compute_norm_dict.py \
+  --file_path /home/rakasheh/master/cassandra/maniskill/data/data_wm_latent.h5
+
+cp /home/rakasheh/master/cassandra/maniskill/data/norm_dict_delta.json \
+  /home/rakasheh/master/cassandra/maniskill/data/norm_dict_delta_wm_latent_all.json
+```
+
+### 2) Use the custom dataset loader
+
+Dataset loader file:
+
+`recipes/quickstart/finetuning/datasets/stackcube_wm_latent.py`
+
+This loader supports both naming schemes for split files:
+
+- `train.hdf5` / `test.hdf5`
+- `data_wm_latent_train.h5` / `data_wm_latent_test.h5`
+
+### 3) Training command (server-ready, local model path)
+
+```bash
+cd llama-recipes
+
+python src/llama_recipes/finetuning_wm.py \
+  --dataset custom_dataset \
+  --custom_dataset.file /home/rakasheh/master/cassandra/safety/forewarn/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/stackcube_wm_latent.py \
+  --custom_dataset.data_path /home/rakasheh/master/cassandra/maniskill/data \
+  --custom_dataset.train_split train \
+  --custom_dataset.test_split test \
+  --custom_dataset.answer_type open-word \
+  --custom_dataset.num_images 16 \
+  --custom_dataset.sample_size 16 \
+  --custom_dataset.num_history_images 1 \
+  --custom_dataset.imagined_steps 63 \
+  --custom_dataset.latent_mode all \
+  --custom_dataset.start_index 0 \
+  --model_name /path/to/local/mllama/Llama-3.2-11B-Vision-Instruct \
+  --wm_config_path /home/rakasheh/master/cassandra/safety/forewarn/configs/wm_example_config_48d_state.yaml
+```
+
+### 4) Inference command (custom dataset + explicit WM config)
+
+```bash
+cd llama-recipes
+
+CUDA_VISIBLE_DEVICES=0 python recipes/quickstart/inference/local_inference/llama_wm_infer.py \
+  --dataset custom_dataset \
+  --custom_dataset.file /home/rakasheh/master/cassandra/safety/forewarn/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/stackcube_wm_latent.py \
+  --custom_dataset.data_path /home/rakasheh/master/cassandra/maniskill/data \
+  --custom_dataset.test_split test \
+  --custom_dataset.answer_type open-word \
+  --custom_dataset.num_images 16 \
+  --custom_dataset.sample_size 16 \
+  --custom_dataset.num_history_images 1 \
+  --custom_dataset.imagined_steps 63 \
+  --custom_dataset.latent_mode all \
+  --custom_dataset.start_index 0 \
+  --model_name /path/to/local/mllama/Llama-3.2-11B-Vision-Instruct \
+  --wm_config_path /home/rakasheh/master/cassandra/safety/forewarn/configs/wm_example_config_48d_state.yaml \
+  --use_sentence True \
+  --print-labels-predictions True
+```

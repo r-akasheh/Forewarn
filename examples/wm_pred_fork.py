@@ -57,7 +57,7 @@ class WMPredictor:
             else: 
                 obs_space[key] = Box(0, 1, shape = value)
         obs_space = Dict(obs_space)
-        print('loading world model from ckpt path', wm_config.from_ckpt)
+        print('loading world model from ckpt path', wm_config.from_ckpinfert)
         self.wm_model = Dreamer.from_pretrained(path = wm_config.from_ckpt, obs_space = obs_space,
                                                 act_space = action_space,
                                                 config = wm_config,

@@ -19,7 +19,7 @@ defaults:
   compile: True
   precision: 32
   debug: False
-  video_pred_log: True
+  video_pred_log: False
   from_ckpt: null
 
 
@@ -28,7 +28,7 @@ defaults:
   obs_step: 1
 
 # Training
-  wandb_name: 'wm_real_cup_bs_16_bl_64_eps_300' ## change to your wandb name
+  wandb_name: 'wm_sim_stackcube_bs_16_bl_64_eps_300' ## change to your wandb name
   batch_size: 16 #32
   batch_length: 64 #64 #16 #32
   train_ratio: 1024
@@ -57,7 +57,7 @@ defaults:
   # Robomimic data ## data path you use to store your own data under /data folder
   root_dir: '/data/wm_data'
 
-  exp_name: 'wm_real_cup' ## experiment name
+  exp_name: 'wm_stack_cube' ## experiment name
   image_size: 64 #64 ## image size, check if the image is clear enough to see
 
   shape_rewards: True
@@ -163,7 +163,7 @@ defaults:
   bc_reg_wd: 1.0           # weight decay factor for BC-loss (1.0 for no decay)
 
   # Environment
-  task: 'GraspCup' ## change to your own name
+  task: 'StackCube-v1' ## change to your own name
   size: [64, 64]
   envs: 1
   action_repeat: 1

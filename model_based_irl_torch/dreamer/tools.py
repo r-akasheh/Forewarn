@@ -20,7 +20,7 @@ from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from common.utils import get_dataset_path_and_meta_info, get_robocasa_dataset_path_and_env_meta, get_real_dataset_path_and_env_meta, get_real_classifier_dataset_path_and_env_meta
+from common.utils import get_dataset_path_and_meta_info, get_robocasa_dataset_path_and_env_meta, get_real_dataset_path_and_env_meta, get_real_classifier_dataset_path_and_env_meta, get_maniskill_dataset_path_and_env_meta
 import dreamer.networks as networks
 import pickle
 import wandb
@@ -505,6 +505,224 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
             )
     f.close()
     return  observation_space, action_space, norm_dict, state_dim, action_dim
+
+
+def fill_expert_dataset_maniskill_privileged(config, cache, is_val_set=False, padding=None):
+    """Load ManiSkill privileged/state-only data from success/failure HDF5 files."""
+    del padding
+    sample_freq = config.sample_freq if hasattr(config, "sample_freq") else 1
+    action_type = getattr(config, "action_type", "delta")
+
+    dataset_paths, _ = get_maniskill_dataset_path_and_env_meta(config=config, env_id=None, done_mode=config.done_mode)
+    success_path = dataset_paths["success"]
+    failure_path = dataset_paths.get("failure", None)
+
+    def _list_demos(h5f):
+        container = h5f["data"] if "data" in h5f else h5f
+        demos = [k for k in container.keys() if isinstance(container[k], h5py.Group)]
+        try:
+            demos = sorted(demos, key=lambda x: int(x.split("_")[-1]))
+        except Exception:
+            demos = sorted(demos)
+        return container, demos
+
+    def _resolve_action_key(traj_group):
+        if action_type == "abs" and "actions_abs" in traj_group:
+            return "actions_abs"
+        if "actions" in traj_group:
+            return "actions"
+        if "actions_abs" in traj_group:
+            return "actions_abs"
+        raise KeyError("No action dataset found (expected actions or actions_abs)")
+
+    def _load_norm_dict(dataset_path):
+        dataset_dir = os.path.dirname(dataset_path)
+        norm_path = os.path.join(dataset_dir, f"norm_dict_{action_type}.json")
+        if not os.path.exists(norm_path):
+            return None
+        with open(norm_path, "r") as file:
+            norm_dict = json.load(file)
+        for key in norm_dict.keys():
+            norm_dict[key] = np.array(norm_dict[key], dtype=np.float32)
+        return norm_dict
+
+    def _normalize(data, data_min, data_max):
+        denom = np.maximum(data_max - data_min, 1e-6)
+        return 2.0 * ((data - data_min) / denom) - 1.0
+
+    def _select_split(items):
+        num_exp_trajs = len(items) if config.num_exp_trajs == -1 else config.num_exp_trajs
+        if is_val_set:
+            start = min(num_exp_trajs, len(items))
+            end = min(len(items), start + config.validation_mse_trajs)
+            if start >= len(items):
+                # If training consumes all trajectories, still provide a validation slice.
+                val_count = min(len(items), config.validation_mse_trajs)
+                if val_count == 0:
+                    return []
+                cprint(
+                    "Not enough holdout trajectories for validation; reusing last trajectories for val split.",
+                    color="yellow",
+                    attrs=["bold"],
+                )
+                return items[-val_count:]
+        else:
+            start = 0
+            end = min(len(items), num_exp_trajs)
+        return items[start:end]
+
+    with h5py.File(success_path, "r") as success_file:
+        success_container, success_demos = _list_demos(success_file)
+
+        failure_ctx = h5py.File(failure_path, "r") if failure_path else None
+        try:
+            if failure_ctx is not None:
+                failure_container, failure_demos = _list_demos(failure_ctx)
+            else:
+                failure_container, failure_demos = None, []
+
+            all_items = [("success", demo, 1) for demo in success_demos] + [
+                ("failure", demo, 0) for demo in failure_demos
+            ]
+            selected_items = _select_split(all_items)
+            if not selected_items:
+                raise ValueError("No trajectories selected for this split. Check num_exp_trajs/validation_mse_trajs.")
+
+            first_source, first_demo, _ = selected_items[0]
+            first_group = success_container[first_demo] if first_source == "success" else failure_container[first_demo]
+            first_obs = np.asarray(first_group["obs"])
+            if first_obs.ndim == 1:
+                first_obs = first_obs[:, None]
+
+            state_slice = getattr(config, "maniskill_state_slice", None)
+            if state_slice is not None:
+                first_obs = first_obs[:, state_slice]
+            state_dim = int(first_obs.shape[-1])
+
+            first_action_key = _resolve_action_key(first_group)
+            first_act = np.asarray(first_group[first_action_key])
+            if first_act.ndim == 1:
+                first_act = first_act[:, None]
+            if first_act.ndim > 2 and first_act.shape[1] == 1:
+                first_act = first_act[:, 0, :]
+            action_shape = tuple(first_act.shape[1:])
+            action_dim = int(action_shape[0])
+            action_space = Box(-1, 1, shape=action_shape)
+
+            obs_space = {
+                "state": Box(-1, 1, shape=(state_dim,)),
+                "is_terminal": Discrete(2),
+                "is_first": Discrete(2),
+                "is_last": Discrete(2),
+                "discount": Box(0, 1, shape=(1,)),
+            }
+            observation_space = Dict(obs_space)
+
+            norm_dict = _load_norm_dict(success_path)
+            if norm_dict is None:
+                ob_min = np.full((state_dim,), np.inf, dtype=np.float32)
+                ob_max = np.full((state_dim,), -np.inf, dtype=np.float32)
+                ac_min = np.full((action_dim,), np.inf, dtype=np.float32)
+                ac_max = np.full((action_dim,), -np.inf, dtype=np.float32)
+
+                for source_name, demo_key, _ in selected_items:
+                    traj_group = success_container[demo_key] if source_name == "success" else failure_container[demo_key]
+                    obs = np.asarray(traj_group["obs"], dtype=np.float32)
+                    if obs.ndim == 1:
+                        obs = obs[:, None]
+                    if state_slice is not None:
+                        obs = obs[:, state_slice]
+                    action_key = _resolve_action_key(traj_group)
+                    act = np.asarray(traj_group[action_key], dtype=np.float32)
+                    if act.ndim == 1:
+                        act = act[:, None]
+                    if act.ndim > 2 and act.shape[1] == 1:
+                        act = act[:, 0, :]
+
+                    seq_len = min(len(obs), len(act))
+                    obs_for_stats = obs[:seq_len]
+                    act_for_stats = act[:seq_len]
+                    if len(obs) == len(act) + 1:
+                        obs_for_stats = obs[1 : len(act) + 1]
+
+                    ob_min = np.minimum(ob_min, obs_for_stats.min(axis=0))
+                    ob_max = np.maximum(ob_max, obs_for_stats.max(axis=0))
+                    ac_min = np.minimum(ac_min, act_for_stats.min(axis=0))
+                    ac_max = np.maximum(ac_max, act_for_stats.max(axis=0))
+
+                norm_dict = {
+                    "ob_min": ob_min,
+                    "ob_max": ob_max,
+                    "ac_min": ac_min,
+                    "ac_max": ac_max,
+                }
+
+            for total_id, (source_name, demo_key, default_label) in enumerate(
+                tqdm(selected_items, desc="Loading ManiSkill privileged data", ncols=0, leave=False)
+            ):
+                traj_group = success_container[demo_key] if source_name == "success" else failure_container[demo_key]
+
+                obs = np.asarray(traj_group["obs"], dtype=np.float32)
+                if obs.ndim == 1:
+                    obs = obs[:, None]
+                if state_slice is not None:
+                    obs = obs[:, state_slice]
+
+                action_key = _resolve_action_key(traj_group)
+                actions = np.asarray(traj_group[action_key], dtype=np.float32)
+                if actions.ndim == 1:
+                    actions = actions[:, None]
+                if actions.ndim > 2 and actions.shape[1] == 1:
+                    actions = actions[:, 0, :]
+
+                if len(obs) == len(actions) + 1:
+                    states = obs[1 : len(actions) + 1]
+                else:
+                    seq_len = min(len(obs), len(actions))
+                    states = obs[:seq_len]
+                    actions = actions[:seq_len]
+
+                states = states[sample_freq - 1 :: sample_freq]
+                actions = actions[sample_freq - 1 :: sample_freq]
+                seq_len = min(len(states), len(actions))
+                states = states[:seq_len]
+                actions = actions[:seq_len]
+
+                if seq_len == 0:
+                    continue
+
+                normalized_state = _normalize(states, norm_dict["ob_min"], norm_dict["ob_max"]).astype(np.float32)
+                normalized_actions = _normalize(actions, norm_dict["ac_min"], norm_dict["ac_max"]).astype(np.float32)
+
+                label = int(traj_group.attrs.get("label", default_label))
+                key = f"exp_traj_{total_id}_0"
+                cache[key] = {
+                    "state": normalized_state,
+                    "action": normalized_actions,
+                    "discount": np.ones(seq_len, dtype=np.float32),
+                    "is_last": np.array([0] * (seq_len - 1) + [1], dtype=np.bool_),
+                    "is_terminal": np.zeros(seq_len, dtype=np.bool_),
+                    "is_first": np.array([1] + [0] * (seq_len - 1), dtype=np.bool_),
+                    "label": np.full(seq_len, label, dtype=np.int32),
+                }
+
+            if not is_val_set:
+                cprint(
+                    f"Loaded {len(selected_items)} trajectories from ManiSkill datasets: {success_path}",
+                    color="magenta",
+                    attrs=["bold"],
+                )
+            else:
+                cprint(
+                    f"Loaded validation trajectories from ManiSkill datasets: {success_path}",
+                    color="magenta",
+                    attrs=["bold"],
+                )
+
+            return observation_space, action_space, norm_dict, state_dim, action_dim
+        finally:
+            if failure_ctx is not None:
+                failure_ctx.close()
 
 
 

@@ -60,8 +60,8 @@ class Dreamer(nn.Module):
     @classmethod
     def from_pretrained(cls, path, obs_space, act_space, config, logger, dataset, expert_dataset=None):
         ckpt = torch.load(path)
-        model = cls(obs_space, act_space, config, logger, dataset, expert_dataset)
-        model.load_state_dict(ckpt['agent_state_dict'])
+        model = cls(obs_space, act_space, config, logger, dataset)
+        model.load_state_dict(ckpt['agent_state_dict'], strict=False)
         # model.eval()
         return model
  

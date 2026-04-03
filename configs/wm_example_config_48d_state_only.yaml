@@ -1,0 +1,75 @@
+defaults:
+  # Minimal WM config for state-only latent extraction in VLM training/inference.
+  from_ckpt: /home/rakasheh/master/cassandra/maniskill/checkpoints/wm_state_based_diffusion/best_pretrain_joint.pt
+  device: cuda:0
+  compile: false
+  precision: 32
+
+  # Data definition
+  task: StackCube-v1
+  size: [64, 64]
+  discount: 0.997
+  done_mode: 0
+  sample_freq: 1
+
+  # State-only observation/action spaces
+  obs_keys: []
+  state_keys: ['state']
+  action_space: [4]
+  observation_space: {
+    'state': [48],
+    'discount': [1],
+  }
+
+  # Model dimensions (must match the trained checkpoint)
+  dyn_hidden: 512
+  dyn_deter: 512
+  dyn_stoch: 32
+  dyn_discrete: 0
+  dyn_rec_depth: 1
+  dyn_mean_act: none
+  dyn_std_act: sigmoid2
+  dyn_min_std: 0.1
+  units: 512
+  act: SiLU
+  norm: true
+  grad_heads: ['decoder', 'cont']
+
+  encoder:
+    {mlp_keys: 'state', cnn_keys: '^$', act: 'SiLU', norm: true, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, symlog_inputs: true}
+  decoder:
+    {mlp_keys: 'state', cnn_keys: '^$', act: 'SiLU', norm: true, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, cnn_sigmoid: false, image_dist: mse, vector_dist: symlog_mse, outscale: 1.0}
+  reward_head:
+    {layers: 2, dist: 'symlog_disc', loss_scale: 1.0, outscale: 0.0}
+  cont_head:
+    {layers: 2, loss_scale: 1.0, outscale: 1.0}
+
+  # Latent projection options used by mllama_model
+  use_additional_projection: false
+
+  # Legacy fields expected by Dreamer init paths
+  log_every: 100
+  log_every_video: 2000
+  batch_size: 16
+  batch_length: 64
+  train_ratio: 1024
+  steps_per_batch: 100
+  action_repeat: 1
+  reset_every: 0
+  pretrain_actor_steps: 0
+  pretrain_joint_steps: 0
+  model_lr: 1e-4
+  opt_eps: 1e-8
+  grad_clip: 1000
+  weight_decay: 0.0
+  opt: adam
+  reward_EMA: true
+  use_reward: false
+  initial: learned
+  dyn_scale: 0.5
+  rep_scale: 0.1
+  kl_free: 1.0
+  imag_horizon: 15
+  imag_gradient: dynamics
+  imag_gradient_mix: 0.0
+

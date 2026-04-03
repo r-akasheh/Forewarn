@@ -135,11 +135,17 @@ def train_eval(config):
     # ==================== Create dataset ====================
     # replay buffer
     all_eps = collections.OrderedDict()
-  
-    observation_space, action_space, _, _, _ = tools.fill_expert_dataset_real_data(config, all_eps)
+
+    dataset_loader = getattr(config, "dataset_loader", "real_data")
+    if dataset_loader == "maniskill_privileged":
+        fill_dataset_fn = tools.fill_expert_dataset_maniskill_privileged
+    else:
+        fill_dataset_fn = tools.fill_expert_dataset_real_data
+
+    observation_space, action_space, _, _, _ = fill_dataset_fn(config, all_eps)
     all_dataset = make_dataset(all_eps, config)
     val_eps = collections.OrderedDict()
-    tools.fill_expert_dataset_real_data(config, val_eps, is_val_set=True)
+    fill_dataset_fn(config, val_eps, is_val_set=True)
     val_dataset = make_dataset(val_eps, config)
 
     
@@ -240,6 +246,7 @@ def train_eval(config):
 
     def evaluate(other_dataset=None, eval_prefix=""):
         agent.eval()
+        loss = {}
         print(
             f"Evaluating for Seeds: {config.eval_num_seeds} and Evals per seed: {config.eval_per_seed}"
         )
@@ -291,7 +298,7 @@ def train_eval(config):
         )
         logger.write(step=logger.step)
        
-        total_loss = 0
+        total_loss = 0.0
         for key in loss.keys():
             total_loss += np.mean(float(torch.mean(loss[key]).cpu().numpy()))
    
@@ -319,7 +326,24 @@ def train_eval(config):
             if step < config.pretrain_joint_steps
             else "pretrain_actor"
         )
+        ckpt_every = int(getattr(config, "pretrain_ckpt_every", config.eval_every))
+        if ckpt_every <= 0:
+            ckpt_every = config.eval_every
+
+        def _save_pretrain_ckpt(name, step):
+            items_to_save = {
+                "agent_state_dict": agent.state_dict(),
+                "optims_state_dict": tools.recursively_collect_optim_state_dict(agent),
+                "global_step": step,
+            }
+            if hasattr(agent, "ema"):
+                items_to_save["ema"] = agent.ema.state_dict()
+            ckpt_path = logdir / f"{name}.pt"
+            torch.save(items_to_save, ckpt_path)
+            print("Saved model to", ckpt_path)
+
         best_pretrain_success = float("inf")
+        current_eval_score = None
         for step in trange(
             total_pretrain_steps,
             desc="World Model pretraining",
@@ -338,6 +362,7 @@ def train_eval(config):
                 score, success = evaluate(
                     other_dataset=all_dataset, eval_prefix="pretrain"
                 )
+                current_eval_score = score
            
            
 
@@ -346,7 +371,29 @@ def train_eval(config):
             sample = next(all_dataset)
        
             agent.pretrain_model_only(sample, step)
-        
+
+            if ((step + 1) % ckpt_every) == 0:
+                current_ckpt_name = ckpt_name(step)
+                _save_pretrain_ckpt(current_ckpt_name, step)
+                if (
+                    current_eval_score is not None
+                    and current_eval_score <= best_pretrain_success
+                ):
+                    best_pretrain_success = current_eval_score
+                    _save_pretrain_ckpt(f"best_{current_ckpt_name}", step)
+
+        # Always keep a canonical final checkpoint name for resume workflows.
+        if total_pretrain_steps > 0:
+            final_step = total_pretrain_steps - 1
+            final_ckpt_name = ckpt_name(final_step)
+            _save_pretrain_ckpt(final_ckpt_name, final_step)
+            if (
+                current_eval_score is not None
+                and current_eval_score <= best_pretrain_success
+            ):
+                best_pretrain_success = current_eval_score
+                _save_pretrain_ckpt(f"best_{final_ckpt_name}", final_step)
+
 
 
 
@@ -464,10 +511,32 @@ if __name__ == "__main__":
     for key, value in sorted(defaults.items(), key=lambda x: x[0]):
         arg_type = tools.args_type(value)
         parser.add_argument(f"--{key}", type=arg_type, default=arg_type(value))
+
+    # Always expose dataset-loader overrides even if omitted in legacy config files.
+    parser.add_argument(
+        "--dataset_loader",
+        type=str,
+        default=defaults.get("dataset_loader", "real_data"),
+    )
+    parser.add_argument(
+        "--success_data",
+        type=str,
+        default=defaults.get("success_data", None),
+    )
+    parser.add_argument(
+        "--failure_data",
+        type=str,
+        default=defaults.get("failure_data", None),
+    )
+
     final_config = parser.parse_args(remaining)
 
     final_config.logdir = f"{final_config.logdir}/{config.expt_name}"
     final_config.time_limit = HORIZONS[final_config.task.split("_")[0]]
+
+    if getattr(final_config, "dataset_loader", "real_data") == "maniskill_privileged":
+        if not getattr(final_config, "success_data", None):
+            raise ValueError("--success_data must be set when --dataset_loader maniskill_privileged")
 
     print("---------------------")
     cprint(f"Experiment name: {config.expt_name}", "red", attrs=["bold"])

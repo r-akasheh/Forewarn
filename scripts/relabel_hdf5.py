@@ -1,171 +1,193 @@
+import argparse
+import json
+import re
+import shutil
+
 import h5py
-import cv2
-import numpy as np
-
-def update_demo_label(hdf5_file_path, demo_index, output_file):
-    """
-    Update the label of a specific demo in an HDF5 file based on user input and save to a new file.
-
-    Args:
-        hdf5_file_path (str): Path to the original HDF5 file.
-        demo_index (int): Index of the demo to process (e.g., 'demo_0').
-        output_file (h5py.File): HDF5 file object to save the updated data.
-
-    Returns:
-        None
-    """
-    with h5py.File(hdf5_file_path, 'r') as file:
-        demo_key = f'demo_{demo_index}'
-        if demo_key not in file['data']:
-            print(f"Demo {demo_key} not found in the HDF5 file.")
-            return
-
-        # Access the 120th image in the wrist camera view
-        try:
-            length = len(file['data'][demo_key]['obs']['cam_wrist_view_image'])
-            image_data = file['data'][demo_key]['obs']['cam_wrist_view_image']
-            front_view_data = file['data'][demo_key]['obs']['cam_front_view_image']
-            if 'label' in file['data'][demo_key].attrs:
-                label = file['data'][demo_key].attrs['label']
-            else: 
-                label = None 
-        except KeyError as e:
-            print(f"KeyError: {e}")
-            return
-        except IndexError as e:
-            print(f"IndexError: {e}")
-            return
-
-        output_label = output_file['data'][demo_key].attrs['label']
-        if  output_label== 4:
-            for i in range(length):
-                print('step', i)
-                if isinstance(image_data[i], np.ndarray):
-                    image = cv2.cvtColor(image_data[i], cv2.COLOR_RGB2BGR) if len(image_data[i].shape) == 3 else image_data
-                    front_image = cv2.cvtColor(front_view_data[i], cv2.COLOR_RGB2BGR) if len(front_view_data[i].shape) == 3 else front_view_data
-                else:
-                    print("Invalid image format.")
-            # return
-
-        # Render the image and display it
-                cv2.imshow(f"Demo {demo_key} - Label: {output_label}", image)
-                cv2.imshow(f"Demo {demo_key} - Label: {output_label} frontview", front_image)
-        # print("Press a key to update the label (0, 1, or 2):")
-                cv2.waitKey(0)
-            # key = input("Press Enter to continue...")
-            key = input("input number...")
-            # key = cv2.waitKey(0)
-            # Map key inputs to labels
-         
-            
-            if key in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
-                new_label = int(key)
-                output_file['data'][demo_key].attrs['label'] = new_label
- 
-
-            # Close the OpenCV window
-            cv2.destroyAllWindows()
-       
-
-def update_demo_length (hdf5_file_path, demo_index, output_file):
-  
-    """
-    Update the label of a specific demo in an HDF5 file based on user input and save to a new file.
-
-    Args:
-        hdf5_file_path (str): Path to the original HDF5 file.
-        demo_index (int): Index of the demo to process (e.g., 'demo_0').
-        output_file (h5py.File): HDF5 file object to save the updated data.
-
-    Returns:
-        None
-    """
-    with h5py.File(hdf5_file_path, 'r') as file:
-        demo_key = f'demo_{demo_index}'
-        if demo_key not in file['data']:
-            print(f"Demo {demo_key} not found in the HDF5 file.")
-            return
-
-        # Copy the demo data to the new file and only keep the first 160 elements
-        
-        attrs_dict = {key: value for key, value in output_file['data'][demo_key].attrs.items()}
-        del output_file['data'][demo_key]
-        if demo_key not in output_file['data']:
-            output_file['data'].create_group(demo_key)
-        for key, value in file['data'][demo_key].items():
-            
-                if key != 'obs':
-                    # Copy the first 160 elements for non-'obs' keys
-                    # output_file['data'][demo_key][key] = value[start_index:cut_length]
-                    output_file['data'][demo_key].create_dataset(
-                        key, data=value#[start_index:cut_length]
-                    )
-                else:
-                    # For 'obs', iterate over subkeys and copy the first 160 elements
-                    output_file['data'][demo_key].create_group('obs')
-                    for subkey in value.keys():
-                        output_file['data'][demo_key][key].create_dataset(
-                            subkey, data=value[subkey]#[start_index:cut_length]
-                        )
-        # Also copy the attributes
-        for key, value in attrs_dict.items():
-            output_file['data'][demo_key].attrs[key] = value
 
 
-def main(hdf5_file_path, output_file_path):
-    """
-    Enumerate over all demo keys in the HDF5 file, update their labels, and save to a new file.
+def load_labels(labels_json_path):
+    """Load {episode_id -> label} mapping from an eval trajectories JSON file."""
+    with open(labels_json_path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
 
-    Args:
-        hdf5_file_path (str): Path to the original HDF5 file.
-        output_file_path (str): Path to the new HDF5 file to save updated data.
+    episodes = payload.get("episodes", [])
+    if not isinstance(episodes, list):
+        raise ValueError("Invalid labels JSON: 'episodes' must be a list")
 
-    Returns:
-        None
-    """
-    # demo_indexes = [109, 120, 129, 133, 138, 156, 171, 195, 196, 217, 218, 221, 223, 237, 247, 249, 260, 261, 263, 273, 282, 283, 289, 290, 299, 300]
-    # import re
+    labels_by_episode_id = {}
+    for episode in episodes:
+        if not isinstance(episode, dict):
+            continue
+        if "episode_id" not in episode or "label" not in episode:
+            continue
 
-    #File path to the log file
-    # file_path = "log.txt"
+        episode_id = int(episode["episode_id"])
+        label = int(episode["label"])
 
-    # # Dictionary to store the mapping of demo IDs to their labels
-    # demo_labels = {}
+        if episode_id in labels_by_episode_id:
+            raise ValueError(f"Duplicate episode_id in labels JSON: {episode_id}")
 
-    # # Regular expression to match the desired pattern
-    # pattern = r"Processing (\d+)\.\.\.\nUpdated label for demo_(\d+) to (\d+)\."
+        labels_by_episode_id[episode_id] = label
 
-    # # Read the file and process its content#
-    # # with open(file_path, "r") as file:
-    #     content = file.read()
-    #     matches = re.findall(pattern, content)
+    if not labels_by_episode_id:
+        raise ValueError("No valid (episode_id, label) pairs found in labels JSON")
 
-# Populate the dictionary with extracted demo IDs and labels
-    # for processing_id, demo_id, label in matches:
-        # demo_labels[int(demo_id)] = int(label)
-    with h5py.File(hdf5_file_path, 'r') as file, h5py.File(output_file_path, 'a') as output_file:
-        if 'data' not in output_file:
-            
-            output_file.create_group('data')
-        demo_keys = list(file['data'].keys())
-        ## sort by the last index
-        demo_keys.sort(key=lambda x: int(x.split('_')[-1]))
-        for demo_key in demo_keys:
-            demo_index = int(demo_key.split('_')[-1])
-            # if demo_index != 206:
-            #     continue
-        # for demo_index in demo_indexes:
-            print(f"Processing {demo_index}...")
-            update_demo_label(hdf5_file_path, demo_index, output_file)
-            # update_demo_length(hdf5_file_path, demo_index, output_file)
+    return labels_by_episode_id
 
-# Example usage
-# main('path_to_file.hdf5', 'path_to_new_file.hdf5')
 
-if __name__ == '__main__':
-    import argparse
+def _extract_index_from_key(key):
+    match = re.match(r"^.+_(\d+)$", key)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _resolve_episode_container(h5_file):
+    """Return the group that contains trajectory/demo groups."""
+    if "data" in h5_file and isinstance(h5_file["data"], h5py.Group):
+        return h5_file["data"]
+    return h5_file
+
+
+def _find_episode_key(container, episode_id):
+    """Find group key for one episode id, supporting demo_* and traj_* names."""
+    preferred = [f"demo_{episode_id}", f"traj_{episode_id}"]
+    for key in preferred:
+        if key in container and isinstance(container[key], h5py.Group):
+            return key
+
+    for key in container.keys():
+        if not isinstance(container[key], h5py.Group):
+            continue
+        key_idx = _extract_index_from_key(key)
+        if key_idx == episode_id:
+            return key
+
+    return None
+
+
+def ensure_data_layout(hdf5_file_path):
+    """Restructure root-level traj/demo groups into /data/demo_<id> layout."""
+    moved = 0
+    with h5py.File(hdf5_file_path, "r+") as h5_file:
+        if "data" in h5_file:
+            return moved
+
+        source_keys = []
+        for key in list(h5_file.keys()):
+            if not isinstance(h5_file[key], h5py.Group):
+                continue
+            key_idx = _extract_index_from_key(key)
+            if key_idx is None:
+                continue
+            source_keys.append((key, key_idx))
+
+        if not source_keys:
+            raise ValueError("No trajectory/demo groups found to restructure")
+
+        h5_file.create_group("data")
+        for source_key, key_idx in source_keys:
+            target_key = f"demo_{key_idx}"
+            target_path = f"data/{target_key}"
+            if target_path in h5_file:
+                raise ValueError(f"Cannot restructure: target already exists: {target_path}")
+            h5_file.move(source_key, target_path)
+            moved += 1
+
+    return moved
+
+
+def apply_labels_to_hdf5(hdf5_file_path, labels_by_episode_id):
+    """Update each demo_i attr label using pre-annotated JSON labels."""
+    updated = 0
+    missing_in_hdf5 = []
+
+    with h5py.File(hdf5_file_path, "r+") as h5_file:
+        container = _resolve_episode_container(h5_file)
+        for episode_id, label in sorted(labels_by_episode_id.items()):
+            episode_key = _find_episode_key(container, episode_id)
+            if episode_key is None:
+                missing_in_hdf5.append(f"episode_id={episode_id}")
+                continue
+
+            container[episode_key].attrs["label"] = label
+            updated += 1
+
+    return updated, missing_in_hdf5
+
+
+def apply_uniform_label_to_all_trajectories(hdf5_file_path, label=1):
+    """Set the same label for every trajectory/demo group in the resolved container."""
+    updated = 0
+
+    with h5py.File(hdf5_file_path, "r+") as h5_file:
+        container = _resolve_episode_container(h5_file)
+        for key in sorted(container.keys()):
+            if not isinstance(container[key], h5py.Group):
+                continue
+            if _extract_index_from_key(key) is None:
+                continue
+            container[key].attrs["label"] = int(label)
+            updated += 1
+
+    return updated
+
+
+def main(
+    input_hdf5_path,
+    output_hdf5_path,
+    labels_json_path=None,
+    restructure_to_data=False,
+    set_all_labels_to_one=False,
+):
+
+    # Keep original input untouched unless output path equals input path.
+    if input_hdf5_path != output_hdf5_path:
+        shutil.copy2(input_hdf5_path, output_hdf5_path)
+
+    if restructure_to_data:
+        moved = ensure_data_layout(output_hdf5_path)
+        print(f"Restructured file to /data/demo_* layout. Moved {moved} groups.")
+
+    if set_all_labels_to_one:
+        updated = apply_uniform_label_to_all_trajectories(output_hdf5_path, label=1)
+        print(f"Updated labels to 1 for {updated} demos/trajectories.")
+    else:
+        labels_by_episode_id = load_labels(labels_json_path)
+        updated, missing_in_hdf5 = apply_labels_to_hdf5(output_hdf5_path, labels_by_episode_id)
+        print(f"Updated labels for {updated} demos.")
+
+        if missing_in_hdf5:
+            print("Warning: these demos were present in JSON but missing in HDF5:")
+            for demo_key in missing_in_hdf5:
+                print(f"  - {demo_key}")
+
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str, required=True, help='Path to the original HDF5 file')
-    parser.add_argument('--output', type=str, required=True, help='Path to the new HDF5 file')
+    parser.add_argument("--input", type=str, required=True, help="Path to the original HDF5 file")
+    parser.add_argument("--output", type=str, required=True, help="Path to the relabeled HDF5 file")
+    parser.add_argument("--labels-json", type=str, help="Path to JSON with episodes[].episode_id and episodes[].label")
+    parser.add_argument(
+        "--set-all-labels-to-one",
+        action="store_true",
+        help="Set label=1 for all trajectories/demos and skip JSON label loading",
+    )
+    parser.add_argument(
+        "--restructure-to-data",
+        action="store_true",
+        help="Move root-level trajectory groups into /data/demo_<id> before relabeling",
+    )
     args = parser.parse_args()
-    main(args.input, args.output)
+
+    if not args.set_all_labels_to_one and not args.labels_json:
+        parser.error("--labels-json is required unless --set-all-labels-to-one is used")
+
+    main(
+        args.input,
+        args.output,
+        args.labels_json,
+        args.restructure_to_data,
+        args.set_all_labels_to_one,
+    )
