@@ -7,7 +7,7 @@
 	branch = avoid_only
 [submodule "vlm/llama-recipes"]
 	path = vlm/llama-recipes
-	url = https://github.com/CMU-IntentLab/llama-recipes.git
+	url = https://github.com/r-akasheh/llama-recipes.git
 [submodule "manimo"]
 	path = manimo
 	url = https://github.com/AGI-Labs/manimo.git
