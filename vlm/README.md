@@ -3,6 +3,16 @@
 This folder (`vlm/`) contains the code for our **Llama Vision-Language Model (VLM)** setup used in Forewarn.
 We **remove the original vision encoder** and instead **project world-model (WM) latents into the language space** for finetuning and inference.
 
+## Recommended Reading Order
+
+For the latest organized docs, start with:
+
+- `docs/README.md`
+- `docs/workflows/state_only_wm_vlm_pipeline.md`
+- `docs/workflows/server_slurm_training.md`
+
+This README still includes legacy and reference command sections.
+
 ---
 
 ## 📁 Code Structure
