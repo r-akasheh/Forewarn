@@ -232,7 +232,7 @@ This loader supports both naming schemes for split files:
 ```bash
 cd llama-recipes
 
-python src/llama_recipes/finetuning_wm.py \
+python -m llama_recipes.finetuning_wm \
   --dataset custom_dataset \
   --custom_dataset.file /home/rakasheh/master/cassandra/safety/forewarn/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/stackcube_wm_latent.py \
   --custom_dataset.data_path /home/rakasheh/master/cassandra/maniskill/data \

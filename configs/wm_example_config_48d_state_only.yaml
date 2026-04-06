@@ -1,6 +1,6 @@
 defaults:
   # Minimal WM config for state-only latent extraction in VLM training/inference.
-  from_ckpt: /home/rakasheh/master/cassandra/maniskill/checkpoints/wm_state_based_diffusion/best_pretrain_joint.pt
+  from_ckpt: /home/rakasheh/forewarn/checkpoints/wm_state_based_diffusion/best_pretrain_joint.pt
   device: cuda:0
   compile: false
   precision: 32
@@ -43,6 +43,14 @@ defaults:
     {layers: 2, dist: 'symlog_disc', loss_scale: 1.0, outscale: 0.0}
   cont_head:
     {layers: 2, loss_scale: 1.0, outscale: 1.0}
+
+  # Ensemble knobs expected by Dreamer head/critic builders.
+  critic_ensemble_size: 1
+  critic_ensemble_subsample: 2
+  reward_ensemble_size: 1
+  reward_ensemble_subsample: 1
+  cont_ensemble_size: 1
+  cont_ensemble_subsample: 1
 
   # Latent projection options used by mllama_model
   use_additional_projection: false
