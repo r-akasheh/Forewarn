@@ -12,6 +12,11 @@ import numpy as np
 import yaml
 
 try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+try:
     import requests
 except ImportError:
     requests = None
@@ -190,7 +195,8 @@ class PolicyLoopSim:
                  logdir="./logs", answer_type="open-word", steering_mode="vlm", auto_start=False,
                  max_trajectories=1, plan_interval=25, peft_model=None, model_name=None,
                  seed=None, vlm_backend_mode="auto", vlm_server_url=None, vlm_timeout_s=45.0,
-                 vlm_max_retries=1, vlm_include_pred_frames=True, allow_local_vlm_fallback=False):
+                 vlm_max_retries=1, vlm_include_pred_frames=True, allow_local_vlm_fallback=False,
+                 show_tiled_candidates=False, tiled_preview_steps=24, tiled_preview_fps=10):
         self.callbacks = list(callbacks or [])
         self.wm_config = wm_config or {}
         self.logdir = logdir
@@ -213,8 +219,13 @@ class PolicyLoopSim:
         self.vlm_max_retries = int(vlm_max_retries)
         self.vlm_include_pred_frames = bool(vlm_include_pred_frames)
         self.allow_local_vlm_fallback = bool(allow_local_vlm_fallback)
+        self.show_tiled_candidates = bool(show_tiled_candidates)
+        self.tiled_preview_steps = max(1, int(tiled_preview_steps))
+        self.tiled_preview_fps = max(1, int(tiled_preview_fps))
         self.vlm_backend = None
         self._local_vlm_backend = None
+        self._preview_env = None
+        self._preview_env_ready = False
 
         os.makedirs(self.logdir, exist_ok=True)
 
@@ -237,6 +248,10 @@ class PolicyLoopSim:
         self.env = self._make_env(self.env_meta)
         self.action_dim = self._infer_action_dim()
         self._default_zero_action = np.zeros(self.action_dim, dtype=np.float32)
+
+        if self.show_tiled_candidates and cv2 is None:
+            print("[PREVIEW] OpenCV not installed; disabling tiled candidate preview")
+            self.show_tiled_candidates = False
 
         for callback in self.callbacks:
             if hasattr(callback, "action_dim"):
@@ -334,6 +349,168 @@ class PolicyLoopSim:
         if space is not None and getattr(space, "shape", None):
             return int(np.prod(space.shape))
         return 4
+
+    @staticmethod
+    def _resolve_state_api_env(env):
+        """Find the first wrapped env object that exposes state snapshot APIs."""
+        cur = env
+        visited = set()
+        while cur is not None and id(cur) not in visited:
+            visited.add(id(cur))
+            if hasattr(cur, "get_state_dict") and hasattr(cur, "set_state_dict"):
+                return cur
+            if hasattr(cur, "get_state") and hasattr(cur, "set_state"):
+                return cur
+            if hasattr(cur, "unwrapped"):
+                unwrapped = cur.unwrapped
+                if unwrapped is not cur:
+                    cur = unwrapped
+                    continue
+            cur = getattr(cur, "env", None)
+        return None
+
+    def _get_env_state(self, env):
+        state_env = self._resolve_state_api_env(env)
+        if state_env is not None and hasattr(state_env, "get_state_dict"):
+            return copy.deepcopy(state_env.get_state_dict())
+        if state_env is not None and hasattr(state_env, "get_state"):
+            return copy.deepcopy(state_env.get_state())
+        raise RuntimeError("Environment does not expose get_state/get_state_dict")
+
+    def _set_env_state(self, env, state):
+        state_env = self._resolve_state_api_env(env)
+        if state_env is not None and hasattr(state_env, "set_state_dict"):
+            state_env.set_state_dict(copy.deepcopy(state))
+            return
+        if state_env is not None and hasattr(state_env, "set_state"):
+            state_env.set_state(copy.deepcopy(state))
+            return
+        raise RuntimeError("Environment does not expose set_state/set_state_dict")
+
+    @staticmethod
+    def _ensure_uint8_rgb(frame: Any) -> np.ndarray:
+        arr = _to_numpy(frame)
+        # Handle batched render output by taking the first frame.
+        if arr.ndim == 4 and arr.shape[0] == 1:
+            arr = arr[0]
+        if arr.ndim == 2:
+            arr = np.repeat(arr[..., None], 3, axis=-1)
+        if arr.shape[-1] > 3:
+            arr = arr[..., :3]
+        if arr.dtype.kind == "f" and arr.size > 0 and float(np.nanmax(arr)) <= 1.0:
+            arr = arr * 255.0
+        if arr.dtype != np.uint8:
+            arr = np.clip(arr, 0, 255).astype(np.uint8)
+        return arr
+
+    def _render_rgb(self, env) -> np.ndarray | None:
+        frame = env.render()
+        if frame is None:
+            return None
+        if isinstance(frame, dict):
+            for key in ("rgb", "rgb_array", "color"):
+                if key in frame:
+                    return self._ensure_uint8_rgb(frame[key])
+            return None
+        return self._ensure_uint8_rgb(frame)
+
+    @staticmethod
+    def _fit_to_size(frame: np.ndarray, h: int, w: int) -> np.ndarray:
+        if frame.shape[0] == h and frame.shape[1] == w:
+            return frame
+        if cv2 is None:
+            return frame
+        return cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
+
+    def _annotate_frame(self, frame: np.ndarray, idx: int, selected_ind: int | None,
+                        vlm_labels: Any = None) -> np.ndarray:
+        if cv2 is None:
+            return frame
+        out = frame.copy()
+        label_val = None
+        if vlm_labels is not None and idx < len(vlm_labels):
+            label_val = vlm_labels[idx]
+        text = f"mode {idx + 1}"
+        if label_val is not None:
+            text += f"  lbl={label_val}"
+        if selected_ind is not None and idx == selected_ind:
+            text += "  [SELECTED]"
+        color = (0, 255, 0) if (selected_ind is not None and idx == selected_ind) else (255, 255, 255)
+        cv2.putText(out, text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA)
+        if selected_ind is not None and idx == selected_ind:
+            cv2.rectangle(out, (0, 0), (out.shape[1] - 1, out.shape[0] - 1), (0, 255, 0), 3)
+        return out
+
+    def _tile_frames(self, frames: list[np.ndarray]) -> np.ndarray:
+        rows, cols = 2, 3
+        base_h = min(f.shape[0] for f in frames)
+        base_w = min(f.shape[1] for f in frames)
+        fitted = [self._fit_to_size(f, base_h, base_w) for f in frames]
+        tiles = []
+        k = 0
+        for _ in range(rows):
+            row_frames = []
+            for _ in range(cols):
+                if k < len(fitted):
+                    row_frames.append(fitted[k])
+                else:
+                    row_frames.append(np.zeros((base_h, base_w, 3), dtype=np.uint8))
+                k += 1
+            tiles.append(np.concatenate(row_frames, axis=1))
+        return np.concatenate(tiles, axis=0)
+
+    def _preview_candidates_tiled(self, actions_candidates: Any, selected_ind: int | None,
+                                  vlm_labels: Any = None):
+        if not self.show_tiled_candidates or cv2 is None or self.env is None:
+            return
+        if actions_candidates is None or len(actions_candidates) == 0:
+            return
+
+        try:
+            if self._preview_env is None:
+                preview_meta = copy.deepcopy(self.env_meta)
+                preview_meta["render_mode"] = "rgb_array"
+                self._preview_env = self._make_env(preview_meta)
+                self._preview_env_ready = False
+
+            if not self._preview_env_ready:
+                self._reset_env(self._preview_env)
+                self._preview_env_ready = True
+
+            base_state = self._get_env_state(self.env)
+            per_candidate_frames = []
+
+            for i, traj in enumerate(actions_candidates):
+                self._set_env_state(self._preview_env, base_state)
+                frames = []
+                first = self._render_rgb(self._preview_env)
+                if first is not None:
+                    frames.append(self._annotate_frame(first, i, selected_ind, vlm_labels))
+
+                horizon = min(self.tiled_preview_steps, len(traj))
+                for t in range(horizon):
+                    action = self._coerce_action(traj[t])
+                    self._step_env(self._preview_env, action)
+                    frame = self._render_rgb(self._preview_env)
+                    if frame is not None:
+                        frames.append(self._annotate_frame(frame, i, selected_ind, vlm_labels))
+
+                if not frames:
+                    frames = [np.zeros((240, 320, 3), dtype=np.uint8)]
+                per_candidate_frames.append(frames)
+
+            max_len = max(len(seq) for seq in per_candidate_frames)
+            delay_ms = max(1, int(1000 / self.tiled_preview_fps))
+            for t in range(max_len):
+                snapshot = [seq[min(t, len(seq) - 1)] for seq in per_candidate_frames]
+                tiled = self._tile_frames(snapshot)
+                cv2.imshow("StackCube Candidate Trajectories", cv2.cvtColor(tiled, cv2.COLOR_RGB2BGR))
+                cv2.waitKey(delay_ms)
+
+            self._set_env_state(self.env, base_state)
+            self._render_if_human()
+        except Exception as exc:
+            print(f"[PREVIEW] tiled candidate preview failed: {exc}")
 
     @staticmethod
     def _reset_env(env, seed=None):
@@ -585,6 +762,22 @@ class PolicyLoopSim:
             finally:
                 self.env = None
 
+        if self._preview_env is not None:
+            try:
+                if hasattr(self._preview_env, "close"):
+                    self._preview_env.close()
+            except Exception:
+                pass
+            finally:
+                self._preview_env = None
+                self._preview_env_ready = False
+
+        if cv2 is not None and self.show_tiled_candidates:
+            try:
+                cv2.destroyWindow("StackCube Candidate Trajectories")
+            except Exception:
+                pass
+
     def _log_callback_obs(self, obs, action_dict):
         obs_copy = copy.deepcopy(obs)
         for cb in self.callbacks:
@@ -684,6 +877,8 @@ class PolicyLoopSim:
                             print("[PLAN] No acceptable trajectory; stopping")
                             traj_status = "failure"
                             break
+
+                        self._preview_candidates_tiled(actions_candidates, selected_ind, vlm_labels)
 
                         selected_traj = actions_candidates[selected_ind]
                         for cb in self.callbacks:
@@ -835,6 +1030,12 @@ def main():
     parser.add_argument("--vlm-max-retries", type=int, default=1)
     parser.add_argument("--vlm-include-pred-frames", action="store_true")
     parser.add_argument("--allow-local-vlm-fallback", action="store_true")
+    parser.add_argument("--show-tiled-candidates", action="store_true",
+                        help="Preview all candidate trajectories in one tiled OpenCV window")
+    parser.add_argument("--tiled-preview-steps", type=int, default=24,
+                        help="How many steps to replay per candidate in tiled preview")
+    parser.add_argument("--tiled-preview-fps", type=int, default=10,
+                        help="Playback FPS for tiled preview window")
     parser.add_argument("--force-exit", action="store_true",
                         help="Force os._exit(0) after run to bypass native shutdown crashes")
     args = parser.parse_args()
@@ -863,7 +1064,10 @@ def main():
         vlm_backend_mode=args.vlm_backend, vlm_server_url=args.vlm_server_url,
         vlm_timeout_s=args.vlm_timeout_s, vlm_max_retries=args.vlm_max_retries,
         vlm_include_pred_frames=args.vlm_include_pred_frames,
-        allow_local_vlm_fallback=args.allow_local_vlm_fallback)
+        allow_local_vlm_fallback=args.allow_local_vlm_fallback,
+        show_tiled_candidates=args.show_tiled_candidates,
+        tiled_preview_steps=args.tiled_preview_steps,
+        tiled_preview_fps=args.tiled_preview_fps)
     loop.run()
     if args.force_exit:
         os._exit(0)
