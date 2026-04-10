@@ -12,7 +12,6 @@ import subprocess
 import time
 from typing import Any, Dict
 
-import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
@@ -205,27 +204,6 @@ class FastAPIDiffusionPolicyBackend:
         self._selected_cursor += 1
         return np.asarray(action, dtype=np.float32)
     
-    def visualize_plans_w_agg(self, trajs, aggregated_trajs, mode_probs, labels, current_pose=None):
-        fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-        axes[0].set_title("Candidate plans")
-        axes[0].bar(np.arange(len(mode_probs)), mode_probs, color="tab:blue")
-        axes[0].set_ylabel("prob")
-        for idx, lbl in enumerate(labels):
-            if lbl == 1:
-                axes[0].bar(idx, mode_probs[idx], color="tab:green")
-        
-        trajs = np.asarray(trajs)
-        if trajs.ndim == 3 and trajs.shape[-1] >= 3:
-            for idx, traj in enumerate(trajs):
-                axes[1].plot(traj[:, 0], alpha=0.6)
-            axes[1].set_ylabel("action[0]")
-            axes[1].set_xlabel("horizon")
-
-        if current_pose is not None and len(current_pose) >= 3:
-            fig.suptitle(f"tcp xyz = {np.round(current_pose[:3], 3)}")
-        fig.tight_layout()
-        return fig
-    
     def log_obs(self, obs, action_dict):
         self.logged_steps.append({"obs": obs, "action": action_dict})
     
@@ -313,27 +291,6 @@ class DummyPolicyCallback:
         action = self._selected_traj[cursor]
         self._selected_cursor += 1
         return np.asarray(action, dtype=np.float32)
-
-    def visualize_plans_w_agg(self, trajs, aggregated_trajs, mode_probs, labels, current_pose=None):
-        fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-        axes[0].set_title("Candidate plans")
-        axes[0].bar(np.arange(len(mode_probs)), mode_probs, color="tab:blue")
-        axes[0].set_ylabel("prob")
-        for idx, lbl in enumerate(labels):
-            if lbl == 1:
-                axes[0].bar(idx, mode_probs[idx], color="tab:green")
-
-        trajs = np.asarray(trajs)
-        if trajs.ndim == 3 and trajs.shape[-1] >= 3:
-            for idx, traj in enumerate(trajs):
-                axes[1].plot(traj[:, 0], alpha=0.6)
-            axes[1].set_ylabel("action[0]")
-            axes[1].set_xlabel("horizon")
-
-        if current_pose is not None and len(current_pose) >= 3:
-            fig.suptitle(f"tcp xyz = {np.round(current_pose[:3], 3)}")
-        fig.tight_layout()
-        return fig
 
     def log_obs(self, obs, action_dict):
         self.logged_steps.append({"obs": obs, "action": action_dict})
@@ -639,24 +596,6 @@ class PolicyLoopSim:
         )
         return any(marker in lowered for marker in markers)
 
-    def _save_plan_figure(self, fig, step_idx: int):
-        if fig is None:
-            return
-        plan_dir = os.path.join(self.logdir, "plans")
-        os.makedirs(plan_dir, exist_ok=True)
-        base = os.path.join(plan_dir, f"plan_step_{step_idx:04d}")
-        try:
-            if hasattr(fig, "savefig"):
-                fig.savefig(f"{base}.png", bbox_inches="tight")
-                plt.close(fig)
-            elif hasattr(fig, "write_html"):
-                fig.write_html(f"{base}.html")
-        except Exception:
-            try:
-                plt.close(fig)
-            except Exception:
-                pass
-
     def _candidate_bundle(self, result):
         if isinstance(result, tuple):
             if len(result) == 6:
@@ -707,8 +646,7 @@ class PolicyLoopSim:
                 vlm_labels = self.process_pred(vlm_predictions)
                 print(f"[VLM] pred={vlm_predictions}, labels={vlm_labels}")
                 print(f"[VLM] pred_2={vlm_predictions_2}")
-                if text_input:
-                    print(f"[VLM] prompt={str(text_input)[:220]}")
+
                 print(f"[VLM] Time: {time.time() - t0:.1f}s")
 
                 if pred_frames is not None and isinstance(pred_frames, dict) and "pred_cam_rs" in pred_frames:
@@ -720,24 +658,12 @@ class PolicyLoopSim:
             else:
                 print("[VLM] Returned None")
 
-        vis_fn = getattr(callback, "visualize_plans_w_agg", None)
-        if callable(vis_fn):
-            try:
-                fig = vis_fn(trajs, aggregated_trajs, mode_probs, labels, current_pose=current_pose)
-                self._save_plan_figure(fig, step_idx)
-            except Exception as exc:
-                print(f"[PLOT] Visualization failed: {exc}")
-
         return (trajs_candidates, pred_trajs_candidates, vlm_labels,
                 vlm_predictions_2, pred_frames, mode_probs, labels, current_pose)
 
 
 
     def _cleanup_resources(self):
-        try:
-            plt.close("all")
-        except Exception:
-            pass
 
         for cb in self.callbacks:
             if hasattr(cb, "_shutdown_worker"):
@@ -979,10 +905,10 @@ def main():
     parser.add_argument("--env-id", default="StackCube-v1")
     parser.add_argument("--obs-mode", default="state")
     parser.add_argument("--control-mode", default="pd_ee_delta_pos")
-    parser.add_argument("--max-episode-steps", type=int, default=50)
+    parser.add_argument("--max-episode-steps", type=int, default=30)
     parser.add_argument("--traj-len", type=int, default=50)
     parser.add_argument("--plan-interval", type=int, default=50)
-    parser.add_argument("--max-trajectories", type=int, default=1)
+    parser.add_argument("--max-trajectories", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--auto-start", action="store_true")
     parser.add_argument("--render", action="store_true")
@@ -1006,6 +932,8 @@ def main():
     parser.add_argument("--vlm-max-retries", type=int, default=1)
     parser.add_argument("--vlm-include-pred-frames", action="store_true")
     parser.add_argument("--allow-local-vlm-fallback", action="store_true")
+    parser.add_argument("--force-exit", action="store_true",
+                        help="Force os._exit(0) after run to bypass native shutdown crashes")
     args = parser.parse_args()
 
     wm_config = _load_yaml_config(args.config)
@@ -1039,6 +967,8 @@ def main():
         vlm_include_pred_frames=args.vlm_include_pred_frames,
         allow_local_vlm_fallback=args.allow_local_vlm_fallback)
     loop.run()
+    if args.force_exit:
+        os._exit(0)
 
 
 if __name__ == "__main__":
