@@ -188,7 +188,7 @@ class FastAPIDiffusionPolicyBackend:
 class PolicyLoopSim:
     def __init__(self, wm_config=None, env_meta=None, callbacks=None, T=100, mode="eval",
                  logdir="./logs", answer_type="open-word", steering_mode="vlm", auto_start=False,
-                 max_trajectories=1, plan_interval=50, peft_model=None, model_name=None,
+                 max_trajectories=1, plan_interval=25, peft_model=None, model_name=None,
                  seed=None, vlm_backend_mode="auto", vlm_server_url=None, vlm_timeout_s=45.0,
                  vlm_max_retries=1, vlm_include_pred_frames=True, allow_local_vlm_fallback=False):
         self.callbacks = list(callbacks or [])
@@ -657,7 +657,7 @@ class PolicyLoopSim:
                          pred_frames, mode_probs, labels, current_pose) = \
                             self.generate_plans(obs, step_idx, question_key=question_key)
                         # Keep second-stage key within StackCube questions.json entries.
-                        question_key = "retry_ok"
+                        question_key = "stable"
 
                         if actions_candidates is None or len(actions_candidates) == 0:
                             print("[PLAN] No candidates; stopping")
@@ -806,11 +806,11 @@ def main():
     parser.add_argument("--env-id", default="StackCube-v1")
     parser.add_argument("--obs-mode", default="state")
     parser.add_argument("--control-mode", default="pd_ee_delta_pos")
-    parser.add_argument("--max-episode-steps", type=int, default=100)
+    parser.add_argument("--max-episode-steps", type=int, default=250)
     parser.add_argument("--traj-len", type=int, default=None,
                         help="Per-trajectory control steps; defaults to --max-episode-steps when omitted")
-    parser.add_argument("--plan-interval", type=int, default=50)
-    parser.add_argument("--max-trajectories", type=int, default=10)
+    parser.add_argument("--plan-interval", type=int, default=64)
+    parser.add_argument("--max-trajectories", type=int, default=1)
     parser.add_argument("--seed", type=int, default=None,
                         help="Base seed. When set, each trajectory uses seed+traj_idx")
     parser.add_argument("--auto-start", action="store_true")
