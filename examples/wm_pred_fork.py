@@ -67,9 +67,22 @@ class WMPredictor:
         self.wm_model.requires_grad_(requires_grad=False)
         self.wm_model.eval().cuda()
         ## normalizing the actions
-        with open(f'/data/wm_data/{self.task_name}_data/norm_dict_abs.json', 'r') as f:
-            print('loading norm_dict from', f'/data/wm_data/{self.task_name}_data/norm_dict_abs.json')
-            norm_dict = json.load(f)
+        # Try to find norm_dict_delta.json in multiple locations
+        norm_dict_paths = [
+            f'/data/wm_data/{self.task_name}_data/norm_dict_delta.json',
+            '/home/rakasheh/master/cassandra/maniskill/data/norm_dict_delta_wm_latent_all.json',
+        ]
+        norm_dict = None
+        for path in norm_dict_paths:
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    print('loading norm_dict from', path)
+                    norm_dict = json.load(f)
+                break
+        
+        if norm_dict is None:
+            raise FileNotFoundError(f"norm_dict_delta.json not found in any of: {norm_dict_paths}")
+        
         self.norm_dict = norm_dict
         for key in self.norm_dict:
             self.norm_dict[key] = np.array(self.norm_dict[key])
@@ -193,23 +206,27 @@ class VLMInference:
         self.dataset_config = dataset_config
         current_path = os.path.abspath(__file__)
         print('wm_config task', self.wm_config['defaults']['task'])
-        if 'cup' in self.wm_config['defaults']['task']:
+        if 'cup' in self.wm_config['defaults']['task'].lower():
             self.task_name = 'GraspCup'
-        elif 'bag' in self.wm_config['defaults']['task']:
+        elif 'bag' in self.wm_config['defaults']['task'].lower():
             self.task_name = 'GraspBag'
-        elif 'Fork' in self.wm_config['defaults']['task']:
+        elif 'fork' in self.wm_config['defaults']['task'].lower():
             self.task_name = 'GraspFork'
-        else: 
-            raise ValueError('Invalid task name')
+        elif 'stackcube' in self.wm_config['defaults']['task'].lower():
+            self.task_name = 'StackCube'
+        else:
+            raise ValueError(f'Invalid task name: {self.wm_config["defaults"]["task"]}')
         if self.task_name == 'GraspCup':
             self.question_path = os.path.join(os.path.dirname(current_path), '../../../failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realcup_data/questions.json')
         elif self.task_name == 'GraspBag':
             self.question_path = os.path.join(os.path.dirname(current_path), '../../../failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realbag_data/questions.json')
         elif self.task_name == 'GraspFork':
             self.question_path = os.path.join(os.path.dirname(current_path), '../../../failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/questions.json')
-        else: 
-            raise ValueError('Invalid task name')
-        
+        elif self.task_name == 'StackCube':
+            self.question_path = None  # No question file needed for StackCube task
+        else:
+            raise ValueError(f'Invalid task name: {self.task_name}')
+
         if "meta-llama" in model_name:
             model, processor = self.load_original_model_and_processor(model_name, peft_model)
             self.num_images = 1
@@ -220,9 +237,23 @@ class VLMInference:
 
             processor.init_dataset_config(self.dataset_config)
        
-        with open(f'/data/wm_data/{self.task_name}_data/norm_dict_abs.json', 'r') as f:
-            norm_dict = json.load(f)
-            print('self.task name', self.task_name)
+        # Try to find norm_dict_delta.json in multiple locations
+        norm_dict_paths = [
+            f'/data/wm_data/{self.task_name}_data/norm_dict_delta.json',
+            '/home/rakasheh/data/wm_data/StackCube_data/norm_dict_delta.json',
+        ]
+        norm_dict = None
+        for path in norm_dict_paths:
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    print('loading norm_dict from', path)
+                    norm_dict = json.load(f)
+                break
+        
+        if norm_dict is None:
+            raise FileNotFoundError(f"norm_dict_delta.json not found in any of: {norm_dict_paths}")
+        
+        print('self.task name', self.task_name)
         self.norm_dict = norm_dict
         for key in self.norm_dict:
             self.norm_dict[key] = np.array(self.norm_dict[key])
@@ -334,41 +365,73 @@ class VLMInference:
 
         return torch.from_numpy(bgr_img[None]).float()
 
+    @staticmethod
+    def _to_numpy(value):
+        if isinstance(value, np.ndarray):
+            return value
+        if hasattr(value, "detach"):
+            value = value.detach()
+        if hasattr(value, "cpu"):
+            value = value.cpu()
+        if hasattr(value, "numpy"):
+            return value.numpy()
+        return np.asarray(value)
+
+    def _state_from_obs(self, obs):
+        if not isinstance(obs, dict):
+            return self._to_numpy(obs).reshape(-1).astype(np.float32)
+
+        if "state" in obs:
+            return self._to_numpy(obs["state"]).reshape(-1).astype(np.float32)
+
+        state_parts = []
+        for key in self.state_keys:
+            if key in obs:
+                state_parts.append(self._to_numpy(obs[key]).reshape(-1))
+
+        if not state_parts:
+            for key, value in obs.items():
+                lowered = str(key).lower()
+                if any(tag in lowered for tag in ("image", "rgb", "depth", "cam")):
+                    continue
+                arr = self._to_numpy(value)
+                if np.issubdtype(arr.dtype, np.number):
+                    state_parts.append(arr.reshape(-1))
+
+        if not state_parts:
+            return np.zeros(1, dtype=np.float32)
+        return np.concatenate(state_parts).astype(np.float32)
+
             
     def _get_images_and_states(self, obs):
         """
         Return images and states given observations
         """
         images = {}
-        state = np.empty(0)
-        if 'state' in obs:
-            state = obs['state']
-        else: 
-            for key in self.state_keys:
-                state = np.append(state, obs[key])
+        state = self._state_from_obs(obs)
 
+        if isinstance(obs, dict):
+            cam_keys = ['cam_rs', 'cam_zed_right']
+            for key in cam_keys:
+                if key not in obs:
+                    continue
+                if isinstance(obs[key], tuple):
+                    img, _ts = obs[key]
+                else:
+                    img = obs[key]
+                print(key)
 
-        cam_keys = ['cam_rs', 'cam_zed_right']
-        for i, key in enumerate(cam_keys):
-            # if i in self.cam_indices:
-            if isinstance(obs[key], tuple):
-                img, ts = obs[key]
-            else: 
-                img = obs[key]
-            print(key)
+                if 'zed' in key:
+                    for new_key in self.img_keys:
+                        if 'front' in new_key:
+                            images[new_key] = self._proc_image(img)
+                elif 'rs' in key:
+                    for new_key in self.img_keys:
+                        if 'wrist' in new_key:
+                            images[new_key] = self._proc_image(img)
+                else:
+                    raise ValueError('Invalid camera key')
 
-            if 'zed' in key:
-                for new_key in self.img_keys:
-                    if 'front' in new_key:
-                        images[new_key] = self._proc_image(img)
-            # cur_img = self._proc_image(img)
-            elif 'rs' in key:
-                for new_key in self.img_keys:
-                    if 'wrist' in new_key:
-                        images[new_key] = self._proc_image(img)
-            else: 
-                raise ValueError('Invalid camera key')
-     
         state = torch.from_numpy(state.astype(np.float32))[None]
         
         return images, state 
@@ -378,13 +441,24 @@ class VLMInference:
 
         images, states = self._get_images_and_states(obs)
         T, _ = states.shape
-        for key in images:
-            if 'front' in key:
-                front_images = images[key]
-            elif 'wrist' in key:
-                wrist_images = images[key]
-            
-        images = np.concatenate((front_images,wrist_images), axis=1)
+        image_array = None
+        if images:
+            front_images = None
+            wrist_images = None
+            for key in images:
+                if 'front' in key and front_images is None:
+                    front_images = images[key]
+                elif 'wrist' in key and wrist_images is None:
+                    wrist_images = images[key]
+
+            if front_images is None and wrist_images is None:
+                image_array = None
+            elif front_images is None:
+                image_array = self._to_numpy(wrist_images)
+            elif wrist_images is None:
+                image_array = self._to_numpy(front_images)
+            else:
+                image_array = np.concatenate((self._to_numpy(front_images), self._to_numpy(wrist_images)), axis=1)
         
         
             # data[key] = images[key]
@@ -399,7 +473,8 @@ class VLMInference:
             data['length'] = 64
             ## add padding
             padded_length = 64 - T
-            images = np.concatenate((images, np.repeat(images[-1:], padded_length, axis=0)), axis=0)
+            if image_array is not None:
+                image_array = np.concatenate((image_array, np.repeat(image_array[-1:], padded_length, axis=0)), axis=0)
             states = np.concatenate((states, np.repeat(states[-1:], padded_length, axis=0)), axis=0)
         if self.question_path is not None:
             with open(self.question_path) as file:
@@ -408,6 +483,8 @@ class VLMInference:
                 data['question'] = questions[self.answer_type]
             else:
                 data['question'] = questions[f"{self.answer_type}-{question_key}"]
+        else:
+            data['question'] = "Based on the provided robot state and candidate actions, choose the best behavior mode."
         ## here start with category
         if self.answer_type == 'category':
             all_images = []
@@ -417,7 +494,6 @@ class VLMInference:
             all_is_terminal = []
             all_lengths = []
             for i in range(len(action_seq)):
-                all_images.extend(images)
                 all_states.extend(states)
                 all_is_first.extend(data['is_first'])
                 all_is_terminal.extend(data['is_terminal'])
@@ -428,19 +504,26 @@ class VLMInference:
                     actions = 2 * actions - 1
                     actions = actions.astype(np.float32)
                 all_actions.append(actions)
-            data['images'] = [Image.fromarray(img.astype('uint8'), 'RGB').resize((128,64)) for img in all_images]
+            if image_array is not None:
+                all_images.extend(image_array)
+                data['images'] = [Image.fromarray(img.astype('uint8'), 'RGB').resize((128,64)) for img in all_images]
+            else:
+                data['images'] = None
             data['states'] = np.array(all_states).astype(np.float32)
             data['actions'] = np.array(all_actions).astype(np.float32)
             data['is_first'] = np.array(all_is_first).astype(np.float32)
             data['is_terminal'] = np.array(all_is_terminal).astype(np.float32)
             data['length'] = np.array(all_lengths).astype(np.float32)
             return [data]
-        pil_images = [Image.fromarray(img.astype('uint8'), 'RGB').resize((128,64)) for img in images]
-
-        data['images'] = pil_images
+        if image_array is not None:
+            pil_images = [Image.fromarray(img.astype('uint8'), 'RGB').resize((128,64)) for img in image_array]
+            data['images'] = pil_images
+        else:
+            data['images'] = None
         
         if self.answer_type == 'text':
-            data['question'] = data['question']['handle-new']
+            if isinstance(data['question'], dict):
+                data['question'] = data['question'].get('handle-new', next(iter(data['question'].values())))
             print('question', data['question'])
         if 'STATE' in data['question']:
             formatted_state = f"Current Robot Gripper State: {','.join(map(str, states[0]))} \n"
@@ -479,12 +562,15 @@ class VLMInference:
         return seq
     
     def generate_second_dialogue(self, predictions, key='grasp-new'):
- 
-        with open(self.question_path) as file:
-            questions = json.load(file)
-        question_template = questions['text']
-        question_key = key##
-        question = question_template[question_key]
+        if self.question_path is None:
+            lines = [f"Behavior mode {i+1}: {prediction}" for i, prediction in enumerate(predictions)]
+            question = "\n".join(lines) + "\nSelect the best behavior mode index."
+        else:
+            with open(self.question_path) as file:
+                questions = json.load(file)
+            question_template = questions['text']
+            question_key = key##
+            question = question_template[question_key]
 
         # Substitute placeholders in the question
         for i, prediction in enumerate(predictions):
@@ -557,15 +643,16 @@ class VLMInference:
     def generate_dialogs(self, samples):
         dialog = []
         images = []
-   
+        batch = None
+
         keys = samples[0].keys()
-        if 'states' in keys:
-            states = []
-            actions = []
-            is_first = []
-            is_terminal = []
-            lengths = [] 
-        for example in samples:        
+        states = []
+        actions = []
+        is_first = []
+        is_terminal = []
+        lengths = []
+        for example in samples:
+            example_images = example.get("images")
             if self.answer_type == 'category':
                 text_split = example['question'].split('<|image|>')
                 current_dialog = [ {"role":"user","content":[]},
@@ -574,19 +661,23 @@ class VLMInference:
                 num_image_token = 0
                 for i in range(len(text_split)-1):
                     current_dialog[0]["content"].append({"type":"text", "text": text_split[i].strip()})
-                    for j in range(self.num_images):
+                    for j in range(self.num_images if example_images is not None else 0):
                         num_image_token += 1
                         current_dialog[0]["content"].append({"type": "image"})
                 current_dialog[0]["content"].append({"type":"text", "text": text_split[-1].strip()})
                 print('num of image token', num_image_token)
-            else:   
-                current_dialog = [ {"role":"user","content":[{"type": "image"}]},]
-                ## for each image, add an image token
-                for i in range(self.num_images-1):
-                    current_dialog[0]["content"].append({"type": "image"})
-                current_dialog[0]["content"].append({"type": "text", "text": example['question'].strip()})
+            else:
+                if example_images is not None:
+                    current_dialog = [ {"role":"user","content":[{"type": "image"}]},]
+                    ## for each image, add an image token
+                    for i in range(self.num_images-1):
+                        current_dialog[0]["content"].append({"type": "image"})
+                    current_dialog[0]["content"].append({"type": "text", "text": example['question'].strip()})
+                else:
+                    current_dialog = [ {"role":"user","content":[{"type": "text", "text": example['question'].strip()}]},]
             dialog.append(current_dialog)
-            images.append(example["images"])
+            if example_images is not None:
+                images.append(example_images)
             # answers.append(example['answer'])
             if 'states' in keys:
                 states.append(example['states'])
@@ -594,10 +685,20 @@ class VLMInference:
                 is_first.append(example["is_first"])
                 is_terminal.append(example["is_terminal"])
                 lengths.append(example["length"])
-        
-                batch = self.tokenize_dialogs(dialog, images, states, actions, is_first, is_terminal, lengths)
-            else: 
-                batch = self.tokenize_dialogs(dialog, images)
+
+                batch = self.tokenize_dialogs(
+                    dialog,
+                    images if len(images) == len(dialog) else None,
+                    states,
+                    actions,
+                    is_first,
+                    is_terminal,
+                    lengths,
+                )
+            else:
+                batch = self.tokenize_dialogs(dialog, images if len(images) == len(dialog) else None)
+        if batch is None:
+            raise ValueError("generate_dialogs received an empty sample list")
         return batch
     
    
@@ -605,9 +706,24 @@ class VLMInference:
     def tokenize_dialogs(self, dialogs, images=None, states=None, actions=None,  is_first = None, is_terminal=None,lengths=None, labels = None):
         text_prompt = self.processor.apply_chat_template(dialogs)
         if states is not None:
-            batch = self.processor(images=images, states = states, actions = actions, is_first = is_first, is_terminal  = is_terminal, lengths = lengths,text=text_prompt,padding = True, return_tensors="pt")
+            processor_kwargs = {
+                "states": states,
+                "actions": actions,
+                "is_first": is_first,
+                "is_terminal": is_terminal,
+                "lengths": lengths,
+                "text": text_prompt,
+                "padding": True,
+                "return_tensors": "pt",
+            }
+            if images is not None:
+                processor_kwargs["images"] = images
+            batch = self.processor(**processor_kwargs)
         else: 
-            batch = self.processor(images=images, text=text_prompt,padding = True, return_tensors="pt")
+            if images is not None:
+                batch = self.processor(images=images, text=text_prompt,padding = True, return_tensors="pt")
+            else:
+                batch = self.processor(text=text_prompt,padding = True, return_tensors="pt")
 
         return batch
      
@@ -640,9 +756,12 @@ class VLMInference:
         
         predictions = self.generate_text_from_image(self.model, self.processor, batch, 0.0, 0.9)
         if hasattr(self.model, 'wm_model'):
-
-            pred_frames = self.model.wm_model._wm.frames
-            pred_frames = self.swap_key(pred_frames)
+            wm_core = getattr(self.model.wm_model, "_wm", None)
+            raw_frames = getattr(wm_core, "frames", None) if wm_core is not None else None
+            if raw_frames is not None:
+                pred_frames = self.swap_key(raw_frames)
+            else:
+                pred_frames = None
         else:
             pred_frames = None
         # for key in pred_frames:

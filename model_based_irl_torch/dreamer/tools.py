@@ -1726,6 +1726,20 @@ class Optimizer:
         use_amp=False,
         lr_decay=False,
     ):
+        def _as_float(value, name):
+            if isinstance(value, str):
+                value = value.strip()
+            try:
+                return float(value)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    f"Optimizer argument '{name}' must be numeric, got {value!r}"
+                ) from exc
+
+        lr = _as_float(lr, "lr")
+        eps = _as_float(eps, "eps")
+        wd = _as_float(wd, "wd") if wd is not None else 0.0
+        clip = _as_float(clip, "clip") if clip is not None else None
         assert 0 <= wd < 1
         assert not clip or 1 <= clip
         self._name = name

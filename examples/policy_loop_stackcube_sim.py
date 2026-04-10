@@ -28,7 +28,12 @@ try:
 except ImportError:  # pragma: no cover - fallback for older installs
     import gym  # type: ignore[no-redef]
 
-from wm_pred_fork import WMPredictor, VLMInference
+try:
+    from .vlm_backend import LocalVLMBackend, RemoteVLMBackend
+    from .wm_pred_fork import WMPredictor
+except ImportError:  # pragma: no cover - direct script fallback
+    from vlm_backend import LocalVLMBackend, RemoteVLMBackend
+    from wm_pred_fork import WMPredictor
 
 
 def _to_numpy(value: Any) -> np.ndarray:
@@ -163,7 +168,6 @@ class DummyPolicyCallback:
         self._dp_loaded = False
         self._dp_agent = None
         self._dp_obs_history = None
-        print(f"Callback: Registered policy checkpoint at {checkpoint_path}")
 
     @staticmethod
     def _load_diffusion_training_symbols():
@@ -233,10 +237,8 @@ class DummyPolicyCallback:
         self._dp_device = device
         self._dp_agent = agent
         self._dp_loaded = True
-        print(f"Callback: Loaded diffusion policy on {device} from {self.policy_ckpt}")
 
     def on_begin_traj(self, traj_idx):
-        print(f"Callback: Beginning trajectory {traj_idx}")
         self.logged_steps = []
         self._selected_traj = None
         self._selected_cursor = 0
@@ -244,115 +246,59 @@ class DummyPolicyCallback:
         self._dp_obs_history = None
 
     def get_candidate_plans_w_current_pose(self, obs, agent_choice=2, n_clusters=6):
-        if self.policy_ckpt:
-            state = _extract_stackcube_state(obs)
-            state_vec = state.get("state", np.zeros(0, dtype=np.float32))
-            state_vec = np.asarray(state_vec, dtype=np.float32).reshape(-1)
-            if state_vec.size == 0:
-                state_vec = np.zeros(1, dtype=np.float32)
+        """Generate candidate plans from diffusion policy or heuristic fallback.
 
-            self._ensure_diffusion_agent(obs_dim=int(state_vec.shape[0]))
-
-            if self._dp_obs_history is None or self._dp_obs_history.shape[1] != state_vec.shape[0]:
-                self._dp_obs_history = np.stack([state_vec] * self.dp_obs_horizon, axis=0)
-            else:
-                self._dp_obs_history = np.roll(self._dp_obs_history, shift=-1, axis=0)
-                self._dp_obs_history[-1] = state_vec
-
-            obs_batch = np.repeat(self._dp_obs_history[None], n_clusters, axis=0)
-            with self._dp_torch.no_grad():
-                obs_tensor = self._dp_torch.from_numpy(obs_batch).float().to(self._dp_device)
-                action_seq = self._dp_agent.get_action(obs_tensor).detach().cpu().numpy()
-
-            trajs = np.asarray(action_seq, dtype=np.float32)
-            if trajs.ndim != 3:
-                trajs = trajs.reshape(n_clusters, -1, self.action_dim)
-            if trajs.shape[-1] != self.action_dim:
-                if trajs.shape[-1] < self.action_dim:
-                    pad = self.action_dim - trajs.shape[-1]
-                    trajs = np.pad(trajs, ((0, 0), (0, 0), (0, pad)))
-                else:
-                    trajs = trajs[:, :, : self.action_dim]
-
-            pred_trajs = trajs.copy()
-            mode_probs = np.ones(len(trajs), dtype=np.float32) / max(len(trajs), 1)
-            labels = np.zeros(len(trajs), dtype=np.int64)
-            current_pose = state.get("tcp_pose", np.zeros(7, dtype=np.float32))
-            print("Callback: Generated diffusion-policy candidate plans")
-            return trajs, pred_trajs, None, mode_probs, labels, current_pose
-
-        print("Callback: Generating state-only candidate plans")
+        Returns:
+            tuple: (trajs, pred_trajs, aggregated_trajs, mode_probs, labels, current_pose)
+                - trajs: Raw action sequences [n_clusters, horizon, action_dim]
+                - pred_trajs: Same as trajs (no separate prediction space)
+                - aggregated_trajs: Cumulative position changes [n_clusters, horizon, ...]
+                - mode_probs: Probability/confidence for each trajectory
+                - labels: Binary labels (1 for good, 0 for neutral, 2 for bad, 3 for unknown)
+                - current_pose: Current TCP pose for context
+        """
         state = _extract_stackcube_state(obs)
-        tcp = state.get("tcp_pose", np.zeros(7, dtype=np.float32))
-        cube_a = state.get("cubeA_pose", tcp)
-        cube_b = state.get("cubeB_pose", tcp)
+        state_vec = state.get("state", np.zeros(0, dtype=np.float32))
+        state_vec = np.asarray(state_vec, dtype=np.float32).reshape(-1)
+        if state_vec.size == 0:
+            state_vec = np.zeros(1, dtype=np.float32)
 
-        tcp_xyz = tcp[:3] if tcp.size >= 3 else np.zeros(3, dtype=np.float32)
-        cube_a_xyz = cube_a[:3] if cube_a.size >= 3 else tcp_xyz
-        cube_b_xyz = cube_b[:3] if cube_b.size >= 3 else tcp_xyz
+        current_pose = state.get("tcp_pose", np.zeros(7, dtype=np.float32))
 
-        to_cube_a = cube_a_xyz - tcp_xyz
-        to_cube_b = cube_b_xyz - tcp_xyz
-        to_goal = cube_b_xyz - cube_a_xyz
+        # Try to use diffusion policy if loaded
+        if self.policy_ckpt:
+            self._ensure_diffusion_agent(obs_dim=int(state_vec.shape[0]))
+            if self._dp_agent is not None:
+                if self._dp_obs_history is None or self._dp_obs_history.shape[1] != state_vec.shape[0]:
+                    self._dp_obs_history = np.stack([state_vec] * self.dp_obs_horizon, axis=0)
+                else:
+                    self._dp_obs_history = np.roll(self._dp_obs_history, shift=-1, axis=0)
+                    self._dp_obs_history[-1] = state_vec
 
-        trajs = np.zeros((n_clusters, self.horizon, self.action_dim), dtype=np.float32)
-        for idx in range(n_clusters):
-            traj = trajs[idx]
-            phase = idx % 4
-            if phase == 0:
-                direction = to_cube_a
-            elif phase == 1:
-                direction = to_cube_b
-            elif phase == 2:
-                direction = to_goal
-            else:
-                direction = -to_cube_a
+                obs_batch = np.repeat(self._dp_obs_history[None], n_clusters, axis=0)
+                with self._dp_torch.no_grad():
+                    obs_tensor = self._dp_torch.from_numpy(obs_batch).float().to(self._dp_device)
+                    action_seq = self._dp_agent.get_action(obs_tensor).detach().cpu().numpy()
 
-            direction = direction.astype(np.float32)
-            norm = float(np.linalg.norm(direction))
-            if norm > 1e-6:
-                direction = direction / norm
-            else:
-                direction = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+                trajs = np.asarray(action_seq, dtype=np.float32)
+                if trajs.ndim != 3:
+                    trajs = trajs.reshape(n_clusters, -1, self.action_dim)
+                if trajs.shape[-1] != self.action_dim:
+                    if trajs.shape[-1] < self.action_dim:
+                        pad = self.action_dim - trajs.shape[-1]
+                        trajs = np.pad(trajs, ((0, 0), (0, 0), (0, pad)))
+                    else:
+                        trajs = trajs[:, :, : self.action_dim]
 
-            step_scale = 0.02 + 0.01 * (idx / max(n_clusters - 1, 1))
-            traj[:, :3] = direction[None, :] * step_scale
+                # Compute aggregated trajectories (cumulative sum of actions)
+                aggregated_trajs = np.cumsum(trajs[:, :, :3], axis=1) if trajs.shape[-1] >= 3 else np.zeros((n_clusters, trajs.shape[1], 3))
+                if trajs.shape[-1] > 3:
+                    aggregated_trajs = np.concatenate([aggregated_trajs, trajs[:, :, 3:4]], axis=-1)
 
-            if self.action_dim > 3:
-                # Close the gripper when approaching cube A, otherwise keep it neutral.
-                traj[:, 3] = -0.15 if phase in (0, 1) else 0.05
-            if self.action_dim > 4:
-                traj[:, 4:] = 0.0
-
-        # Simple, state-aware heuristics to make the template more useful.
-        scores = []
-        for traj in trajs:
-            first = traj[0, :3]
-            last = traj[-1, :3]
-            smoothness = 0.0
-            if len(traj) > 1:
-                smoothness = float(np.mean(np.linalg.norm(np.diff(traj[:, :3], axis=0), axis=1)))
-            score = -float(np.linalg.norm(tcp_xyz + first - cube_a_xyz))
-            score -= 0.5 * float(np.linalg.norm(cube_a_xyz + last - cube_b_xyz))
-            score -= 0.1 * smoothness
-            if self.action_dim > 3:
-                score -= 0.05 * float(np.mean(np.abs(traj[:, 3])))
-            scores.append(score)
-
-        mode_probs = _softmax(scores)
-        labels = np.zeros(n_clusters, dtype=np.int64)
-        if len(scores) > 0:
-            labels[int(np.argmax(scores))] = 1
-
-        pred_trajs = trajs.copy()
-        aggregated_trajs = np.cumsum(trajs[:, :, :3], axis=1)
-        if self.action_dim > 3:
-            aggregated_trajs = np.concatenate(
-                [aggregated_trajs, trajs[:, :, 3:4]], axis=-1
-            )
-
-        current_pose = tcp.copy()
-        return trajs, pred_trajs, aggregated_trajs, mode_probs, labels, current_pose
+                pred_trajs = trajs.copy()
+                mode_probs = np.ones(len(trajs), dtype=np.float32) / max(len(trajs), 1)
+                labels = np.zeros(len(trajs), dtype=np.int64)
+                return trajs, pred_trajs, aggregated_trajs, mode_probs, labels, current_pose
 
     def visualize_plans_w_agg(self, trajs, aggregated_trajs, mode_probs, labels, current_pose):
         trajs = np.asarray(trajs)
@@ -382,7 +328,6 @@ class DummyPolicyCallback:
         return fig
 
     def set_traj_in_the_middle(self, selected_action, pred_action, step_idx):
-        print(f"Callback: Selected trajectory for step {step_idx}")
         self._selected_traj = np.asarray(selected_action, dtype=np.float32)
         self._selected_cursor = 0
         self._selected_step = step_idx
@@ -402,7 +347,6 @@ class DummyPolicyCallback:
         return None
 
     def on_end_traj(self, traj_idx, traj_status):
-        print(f"Callback: End trajectory {traj_idx}, status: {traj_status}")
         return False
 
 
@@ -424,6 +368,12 @@ class PolicyLoopSim:
         peft_model: Optional[str] = None,
         model_name: Optional[str] = None,
         seed: Optional[int] = None,
+        vlm_backend_mode: str = "auto",
+        vlm_server_url: Optional[str] = None,
+        vlm_timeout_s: float = 45.0,
+        vlm_max_retries: int = 1,
+        vlm_include_pred_frames: bool = True,
+        allow_local_vlm_fallback: bool = False,
     ):
         self.callbacks = list(callbacks or [])
         self.wm_config = wm_config or {}
@@ -441,6 +391,16 @@ class PolicyLoopSim:
         self._default_plan_horizon = 64
         self._default_num_candidates = 6
         self._default_zero_action = None
+        self.model_name = model_name
+        self.peft_model = peft_model
+        self.vlm_backend_mode = str(vlm_backend_mode).lower()
+        self.vlm_server_url = vlm_server_url
+        self.vlm_timeout_s = float(vlm_timeout_s)
+        self.vlm_max_retries = int(vlm_max_retries)
+        self.vlm_include_pred_frames = bool(vlm_include_pred_frames)
+        self.allow_local_vlm_fallback = bool(allow_local_vlm_fallback)
+        self.vlm_backend = None
+        self._local_vlm_backend = None
 
         os.makedirs(self.logdir, exist_ok=True)
 
@@ -449,19 +409,11 @@ class PolicyLoopSim:
 
         # Initialize VLM inference if steering_mode is vlm
         if self.steering_mode == "vlm":
-            if model_name is None:
-                model_name = "/data/mllama/Llama-3.2-11B-Vision-Instruct/custom"
-            if peft_model is None:
-                peft_model = "/data/peft_models/run_02_21_custom_wm_150k_vlm_finetuning_0.2%_imagined_step63_1_history_16sample_size_fork_task_open-word-fork-all_18epoch_print_eval_metrics_3class_aug_failure_by2_shuffle_key_correct_prompt_hist_no_start_from_75/peft_checkpoint_18"
-
-            self.vlm_inference = VLMInference(
-                wm_configs=self.wm_config,
-                model_name=model_name,
-                peft_model=peft_model,
-                answer_type=answer_type,
-            )
-        else:
-            self.vlm_inference = None
+            if self.model_name is None:
+                self.model_name = "/data/mllama/Llama-3.2-11B-Vision-Instruct/custom"
+            if self.peft_model is None:
+                self.peft_model = "/data/peft_models/run_02_21_custom_wm_150k_vlm_finetuning_0.2%_imagined_step63_1_history_16sample_size_fork_task_open-word-fork-all_18epoch_print_eval_metrics_3class_aug_failure_by2_shuffle_key_correct_prompt_hist_no_start_from_75/peft_checkpoint_18"
+            self._init_vlm_backend()
 
         self.env_meta = env_meta or _default_env_meta()
         self.env = self._make_env(self.env_meta)
@@ -485,6 +437,90 @@ class PolicyLoopSim:
                         "Warning: callback does not expose checkpoint loading hooks; "
                         f"ignoring --policy-ckpt={self.policy_ckpt}"
                     )
+
+    def _build_local_vlm_backend(self):
+        return LocalVLMBackend(
+            wm_configs=self.wm_config,
+            model_name=self.model_name,
+            peft_model=self.peft_model,
+            answer_type=self.answer_type,
+        )
+
+    def _init_vlm_backend(self):
+        mode = self.vlm_backend_mode
+        if mode not in {"auto", "local", "remote"}:
+            raise ValueError(f"Invalid --vlm-backend value: {mode}")
+
+        if mode == "remote":
+            if not self.vlm_server_url:
+                raise ValueError("--vlm-server-url is required when --vlm-backend=remote")
+            self.vlm_backend = RemoteVLMBackend(
+                server_url=self.vlm_server_url,
+                timeout_s=self.vlm_timeout_s,
+                max_retries=self.vlm_max_retries,
+                include_pred_frames=self.vlm_include_pred_frames,
+            )
+            print(f"VLM backend: remote ({self.vlm_server_url})")
+            return
+
+        if mode == "local":
+            self._local_vlm_backend = self._build_local_vlm_backend()
+            self.vlm_backend = self._local_vlm_backend
+            print("VLM backend: local")
+            return
+
+        if self.vlm_server_url:
+            self.vlm_backend = RemoteVLMBackend(
+                server_url=self.vlm_server_url,
+                timeout_s=self.vlm_timeout_s,
+                max_retries=self.vlm_max_retries,
+                include_pred_frames=self.vlm_include_pred_frames,
+            )
+            print(f"VLM backend: auto -> remote ({self.vlm_server_url})")
+        else:
+            self._local_vlm_backend = self._build_local_vlm_backend()
+            self.vlm_backend = self._local_vlm_backend
+            print("VLM backend: auto -> local")
+
+    def _infer_vlm_two_stage(self, obs, trajs_candidates):
+        if self.vlm_backend is None:
+            return None, None, None, None
+
+        # Debug: log what we're sending to VLM
+        if isinstance(trajs_candidates, np.ndarray):
+            print(f"Debug: trajs_candidates shape={trajs_candidates.shape}, dtype={trajs_candidates.dtype}, "
+                  f"first traj sample=[{trajs_candidates[0, 0, :]}]")
+        else:
+            print(f"Debug: trajs_candidates type={type(trajs_candidates)}")
+
+        try:
+            return self.vlm_backend.infer_two_stage(
+                obs,
+                trajs_candidates,
+                normalize=False,  # trajectories are already in delta/action space
+                question_key="grasping",
+            )
+        except Exception as exc:
+            print(f"Warning: primary VLM backend failed: {exc}")
+
+        if not self.allow_local_vlm_fallback:
+            return None, None, None, None
+
+        if isinstance(self.vlm_backend, RemoteVLMBackend):
+            try:
+                if self._local_vlm_backend is None:
+                    self._local_vlm_backend = self._build_local_vlm_backend()
+                print("Falling back to local VLM backend")
+                return self._local_vlm_backend.infer_two_stage(
+                    obs,
+                    trajs_candidates,
+                    normalize=True,
+                    question_key="grasping",
+                )
+            except Exception as fallback_exc:
+                print(f"Warning: local VLM fallback failed: {fallback_exc}")
+
+        return None, None, None, None
 
 
     def _make_env(self, env_meta: Dict[str, Any]):
@@ -702,7 +738,6 @@ class PolicyLoopSim:
                 "The callback must define get_candidate_plans_w_current_pose(obs, agent_choice, n_clusters)"
             )
 
-        print("generating candidate plans in the middle of the plan!")
         result = callback.get_candidate_plans_w_current_pose(
             obs, agent_choice=2, n_clusters=self._default_num_candidates
         )
@@ -717,24 +752,29 @@ class PolicyLoopSim:
         pred_frames = None
         vlm_labels = None
 
-        if self.steering_mode == "vlm" and self.vlm_inference is not None:
+        if self.steering_mode == "vlm" and self.vlm_backend is not None:
+            print(f"Debug: Passing {trajs_candidates.shape if isinstance(trajs_candidates, np.ndarray) else 'non-array'} trajectories to VLM")
             infer_time = time.time()
-            vlm_predictions, text_input, vlm_predictions_2, pred_frames = self.vlm_inference.infer_two_stage(
-                obs, trajs_candidates, normalize=True, question_key="grasping"
+            vlm_predictions, _text_input, vlm_predictions_2, pred_frames = self._infer_vlm_two_stage(
+                obs,
+                trajs_candidates,
             )
-            vlm_labels = self.process_pred(vlm_predictions)
-            print("vlm prediction", vlm_predictions, vlm_labels)
-            print("vlm prediction 2", vlm_predictions_2)
-            print("vlm inference time", time.time() - infer_time)
+            if vlm_predictions is not None:
+                vlm_labels = self.process_pred(vlm_predictions)
+                print("vlm prediction", vlm_predictions, vlm_labels)
+                print("vlm prediction 2", vlm_predictions_2)
+                print("vlm inference time", time.time() - infer_time)
 
-            # Save prediction gifs if available
-            if pred_frames is not None and "pred_cam_rs" in pred_frames:
-                for choice in range(len(pred_frames["pred_cam_rs"])):
-                    label = vlm_labels[choice] if choice < len(vlm_labels) else "unknown"
-                    imageio.mimsave(
-                        os.path.join(self.logdir, f"pred_{step_idx}_{choice}_{label}.gif"),
-                        pred_frames["pred_cam_rs"][choice],
-                    )
+                # Save prediction gifs if available
+                if pred_frames is not None and "pred_cam_rs" in pred_frames:
+                    for choice in range(len(pred_frames["pred_cam_rs"])):
+                        label = vlm_labels[choice] if choice < len(vlm_labels) else "unknown"
+                        imageio.mimsave(
+                            os.path.join(self.logdir, f"pred_{step_idx}_{choice}_{label}.gif"),
+                            pred_frames["pred_cam_rs"][choice],
+                        )
+            else:
+                print("VLM inference unavailable; falling back to heuristic candidate selection")
 
         # Visualize plans
         vis_fn = getattr(callback, "visualize_plans_w_agg", None)
@@ -771,7 +811,6 @@ class PolicyLoopSim:
                     print(f"Starting trajectory {traj_idx}")
 
                 obs, info = self._reset_env(self.env, seed=self.seed)
-                print("Initial obs keys:", list(obs.keys()) if isinstance(obs, dict) else type(obs))
 
                 for callback in self.callbacks:
                     callback.pred_obs = copy.deepcopy(obs)
@@ -825,22 +864,20 @@ class PolicyLoopSim:
                             success = False
                             selected_ind = None
 
-                            # First try VLM verification answer
-                            if vlm_pred_2 is not None:
+                            # Try VLM verification answer
+                            if vlm_pred_2 is not None and len(vlm_pred_2) > 0:
                                 for choice in range(len(vlm_labels)):
                                     if str(choice + 1) in vlm_pred_2[0]:
                                         selected_ind = choice
                                         success = True
-                                        print(f"Selected trajectory {choice} via VLM verification")
                                         break
 
                             # Fallback to label-based selection
                             if not success:
                                 for choice in range(len(vlm_labels)):
-                                    if vlm_labels[choice] == 1:  # Center/good placement
+                                    if vlm_labels[choice] == 1:
                                         selected_ind = choice
                                         success = True
-                                        print(f"Selected trajectory {choice} via VLM label")
                                         break
 
                             if not success:
@@ -848,24 +885,10 @@ class PolicyLoopSim:
                                 traj_status = "failure"
                                 break
                         else:
-                            # Heuristic or classifier selection
-                            selected_ind, selected_traj, candidate_scores = self._select_candidate(
-                                obs,
-                                actions_candidates,
-                                pred_actions_candidates,
-                                mode_probs,
-                                labels,
-                            )
-                            if selected_ind is None or selected_traj is None:
-                                print("Could not select a candidate trajectory; stopping trajectory.")
-                                traj_status = "failure"
-                                break
-
-                            selected_score = candidate_scores[selected_ind] if candidate_scores else None
-                            print(
-                                f"Selected trajectory {selected_ind} at step {step_idx}"
-                                + (f" (score={selected_score:.3f})" if selected_score is not None else "")
-                            )
+                            # Non-VLM steering modes not currently implemented for state-only StackCube
+                            print("Heuristic steering mode not implemented for this configuration; stopping trajectory.")
+                            traj_status = "failure"
+                            break
 
                         if selected_ind is not None:
                             selected_traj = actions_candidates[selected_ind]
@@ -922,19 +945,28 @@ class PolicyLoopSim:
                             for key, value in info.items()
                         }
 
+                    # Build a mutable container for logging-only enrichments.
+                    if isinstance(obs, dict):
+                        obs_for_log = copy.deepcopy(obs)
+                    else:
+                        obs_for_log = {
+                            "obs_raw": _to_numpy(obs),
+                            "obs_type": type(obs).__name__,
+                        }
+
                     # Log prediction frames and labels during execution
                     if step_idx < pred_length + start_index and step_idx >= start_index:
                         if pred_frames is not None:
                             for key in pred_frames.keys():
                                 for choice in range(self._default_num_candidates):
                                     if choice < len(pred_frames[key]):
-                                        obs[f"{key}_{choice}"] = pred_frames[key][choice][step_idx - start_index]
+                                        obs_for_log[f"{key}_{choice}"] = pred_frames[key][choice][step_idx - start_index]
                                 if selected_ind is not None and selected_ind < len(pred_frames[key]):
-                                    obs[key] = pred_frames[key][selected_ind][step_idx - start_index]
+                                    obs_for_log[key] = pred_frames[key][selected_ind][step_idx - start_index]
                         if vlm_labels is not None:
-                            obs["vlm_labels"] = vlm_labels
+                            obs_for_log["vlm_labels"] = vlm_labels
 
-                    self._log_callback_obs(obs, action_dict)
+                    self._log_callback_obs(obs_for_log, action_dict)
 
                     obs = new_obs
                     if self._info_success(info):
@@ -1027,12 +1059,47 @@ def main():
     parser.add_argument(
         "--policy-ckpt",
         type=str,
-        default=None,
+        default='/home/rakasheh/master/cassandra/maniskill/checkpoints/diffusion_state/checkpoint_diffusion_policy_stack_cube.pt',
         help="Path to trained generative policy checkpoint (e.g., diffusion policy checkpoint)",
     )
     parser.add_argument("--dp-obs-horizon", type=int, default=2, help="Diffusion policy observation horizon")
     parser.add_argument("--dp-act-horizon", type=int, default=8, help="Diffusion policy action horizon")
     parser.add_argument("--dp-pred-horizon", type=int, default=16, help="Diffusion policy prediction horizon")
+    parser.add_argument(
+        "--vlm-backend",
+        type=str,
+        default="auto",
+        choices=("auto", "local", "remote"),
+        help="VLM backend mode: local in-process, remote FastAPI, or auto",
+    )
+    parser.add_argument(
+        "--vlm-server-url",
+        type=str,
+        default=None,
+        help="Remote VLM server URL, e.g. http://my-gpu-server:8010",
+    )
+    parser.add_argument(
+        "--vlm-timeout-s",
+        type=float,
+        default=45.0,
+        help="Timeout (seconds) for remote VLM inference requests",
+    )
+    parser.add_argument(
+        "--vlm-max-retries",
+        type=int,
+        default=1,
+        help="Retry count for remote VLM requests",
+    )
+    parser.add_argument(
+        "--vlm-include-pred-frames",
+        action="store_true",
+        help="Request predicted frames from remote VLM server (larger payloads)",
+    )
+    parser.add_argument(
+        "--allow-local-vlm-fallback",
+        action="store_true",
+        help="If remote VLM fails, load local VLM and retry inference",
+    )
     args = parser.parse_args()
 
     wm_config = _load_yaml_config(args.config)
@@ -1068,6 +1135,12 @@ def main():
         seed=args.seed,
         model_name=args.model_name,
         peft_model=args.peft_model,
+        vlm_backend_mode=args.vlm_backend,
+        vlm_server_url=args.vlm_server_url,
+        vlm_timeout_s=args.vlm_timeout_s,
+        vlm_max_retries=args.vlm_max_retries,
+        vlm_include_pred_frames=args.vlm_include_pred_frames,
+        allow_local_vlm_fallback=args.allow_local_vlm_fallback,
     )
     loop.run()
 
