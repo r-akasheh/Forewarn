@@ -223,7 +223,7 @@ class VLMInference:
         elif self.task_name == 'GraspFork':
             self.question_path = os.path.join(os.path.dirname(current_path), '../../../failure_detection/vlm/llama-recipes/recipes/quickstart/finetuning/datasets/realfork_data/questions.json')
         elif self.task_name == 'StackCube':
-            self.question_path = None  # No question file needed for StackCube task
+            self.question_path = '/home/rakasheh/data/stackcube_wm/questions.json'
         else:
             raise ValueError(f'Invalid task name: {self.task_name}')
 
@@ -479,12 +479,31 @@ class VLMInference:
         if self.question_path is not None:
             with open(self.question_path) as file:
                 questions = json.load(file)
-            if question_key is None:
-                data['question'] = questions[self.answer_type]
+
+            # For open-word we always use the single behavior-description prompt.
+            if self.answer_type == "open-word":
+                question = questions.get("open-word")
+            elif question_key is None:
+                question = questions.get(self.answer_type)
             else:
-                data['question'] = questions[f"{self.answer_type}-{question_key}"]
+                keyed_name = f"{self.answer_type}-{question_key}"
+                question = questions.get(keyed_name)
+                if question is None:
+                    base = questions.get(self.answer_type)
+                    if isinstance(base, dict):
+                        question = base.get(question_key)
+                    elif base is not None:
+                        question = base
+
+            if question is None:
+                available = ", ".join(sorted(questions.keys()))
+                raise KeyError(
+                    f"Question template not found for answer_type={self.answer_type!r}, "
+                    f"question_key={question_key!r}. Available top-level keys: {available}"
+                )
+            data['question'] = question
         else:
-            data['question'] = "Based on the provided robot state and candidate actions, choose the best behavior mode."
+            data['question'] = "Based on the provided task description input and the latent state sequence of robot execution, respond with only one sentence that best describes the robot's behavior."
         ## here start with category
         if self.answer_type == 'category':
             all_images = []
@@ -546,6 +565,7 @@ class VLMInference:
             else: 
                 data_copy['actions'] = actions.astype(np.float32)
             data_all.append(data_copy)
+
         return data_all
   
     
@@ -561,15 +581,18 @@ class VLMInference:
           
         return seq
     
-    def generate_second_dialogue(self, predictions, key='grasp-new'):
+    def generate_second_dialogue(self, predictions, key='stable'):
         if self.question_path is None:
             lines = [f"Behavior mode {i+1}: {prediction}" for i, prediction in enumerate(predictions)]
             question = "\n".join(lines) + "\nSelect the best behavior mode index."
         else:
             with open(self.question_path) as file:
                 questions = json.load(file)
-            question_template = questions['text']
-            question_key = key##
+            question_template = questions.get('text', {})
+            question_key = key
+            if question_key not in question_template:
+                # StackCube supports stable/gentle/retry_ok; default to stable on invalid keys.
+                question_key = 'stable'
             question = question_template[question_key]
 
         # Substitute placeholders in the question
@@ -587,7 +610,7 @@ class VLMInference:
   
     def generate_second_stage_response(self,
         model, processor, predictions, temperature: float, top_p: float, use_sentence = False, dataset_config = None,
-          key = 'grasp-handle',
+          key = 'stable',
     ):
         """
         Generate text from an image using the model and processor.
@@ -651,8 +674,10 @@ class VLMInference:
         is_first = []
         is_terminal = []
         lengths = []
+
         for example in samples:
             example_images = example.get("images")
+
             if self.answer_type == 'category':
                 text_split = example['question'].split('<|image|>')
                 current_dialog = [ {"role":"user","content":[]},
@@ -703,7 +728,7 @@ class VLMInference:
     
    
     
-    def tokenize_dialogs(self, dialogs, images=None, states=None, actions=None,  is_first = None, is_terminal=None,lengths=None, labels = None):
+    def tokenize_dialogs(self, dialogs, images=None, states=None, actions=None, is_first=None, is_terminal=None, lengths=None, labels=None):
         text_prompt = self.processor.apply_chat_template(dialogs)
         if states is not None:
             processor_kwargs = {
@@ -721,9 +746,9 @@ class VLMInference:
             batch = self.processor(**processor_kwargs)
         else: 
             if images is not None:
-                batch = self.processor(images=images, text=text_prompt,padding = True, return_tensors="pt")
+                batch = self.processor(images=images, text=text_prompt, padding=True, return_tensors="pt")
             else:
-                batch = self.processor(text=text_prompt,padding = True, return_tensors="pt")
+                batch = self.processor(text=text_prompt, padding=True, return_tensors="pt")
 
         return batch
      
@@ -752,6 +777,8 @@ class VLMInference:
     def infer(self, obs, action_seq, normalize=False, question_key = None):
         self.processor.num_images = 16
         samples = self.process_data(obs, action_seq, normalize, question_key = question_key)
+
+
         batch = self.generate_dialogs(samples)
         
         predictions = self.generate_text_from_image(self.model, self.processor, batch, 0.0, 0.9)
@@ -764,8 +791,6 @@ class VLMInference:
                 pred_frames = None
         else:
             pred_frames = None
-        # for key in pred_frames:
-        #     pred_frames[key] = pred_frames[key][0]
         return predictions, pred_frames
 
 
@@ -778,7 +803,8 @@ class VLMInference:
     def infer_two_stage(self, obs, action_seq, normalize=False, question_key = 'grasping'):
         predictions, pred_frames = self.infer(obs, action_seq, normalize, question_key = question_key)
         ## generate the second stage dialogue
-        text_input, predictions_second_stage = self.generate_second_stage_response(self.model, self.processor, predictions, 0.0, 0.9)
+        text_input, predictions_second_stage = self.generate_second_stage_response(
+            self.model, self.processor, predictions, 0.0, 0.9, key=question_key)
 
         return predictions, text_input, predictions_second_stage, pred_frames
     def process_pred(self, predictions):

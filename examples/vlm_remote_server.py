@@ -66,7 +66,7 @@ def create_app(
     config_path: str,
     model_name: str,
     peft_model: str | None,
-    answer_type: str = "snippet",
+    answer_type: str = "open-word",
     cuda_visible_devices: str | None = "0",
 ) -> FastAPI:
     state: Dict[str, Any] = {"backend": None, "ready": False, "error": None}
@@ -143,7 +143,7 @@ def main():
         help="Path to base VLM model",
     )
     parser.add_argument("--peft-model", type=str, default=None, help="Path to VLM PEFT checkpoint")
-    parser.add_argument("--answer-type", type=str, default="snippet")
+    parser.add_argument("--answer-type", type=str, default="open-word")
     parser.add_argument(
         "--cuda-visible-devices",
         type=str,
