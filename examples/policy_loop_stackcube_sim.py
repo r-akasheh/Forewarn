@@ -4,11 +4,7 @@ import argparse
 import copy
 import imageio
 import os
-import pickle
 import re
-import select
-import struct
-import subprocess
 import time
 from typing import Any, Dict
 
@@ -29,30 +25,6 @@ try:
     from .vlm_backend import LocalVLMBackend, RemoteVLMBackend
 except ImportError:
     from vlm_backend import LocalVLMBackend, RemoteVLMBackend
-
-
-def _pipe_send(proc: subprocess.Popen, obj: object) -> None:
-    data = pickle.dumps(obj, protocol=4)
-    proc.stdin.write(struct.pack(">I", len(data)))
-    proc.stdin.write(data)
-    proc.stdin.flush()
-
-
-def _pipe_recv(proc: subprocess.Popen, timeout_s: float = 300.0) -> object:
-    start_time = time.time()
-    while True:
-        elapsed = time.time() - start_time
-        if elapsed > timeout_s:
-            raise TimeoutError(f"Worker timeout after {timeout_s}s")
-
-        remaining = timeout_s - elapsed
-        ready, _, _ = select.select([proc.stdout], [], [], min(1.0, remaining))
-        if ready:
-            raw = proc.stdout.read(4)
-            if len(raw) < 4:
-                raise EOFError("Worker pipe closed")
-            length, = struct.unpack(">I", raw)
-            return pickle.loads(proc.stdout.read(length))
 
 
 def _to_numpy(value: Any) -> np.ndarray:
@@ -198,9 +170,10 @@ class FastAPIDiffusionPolicyBackend:
     
     def get_action(self, obs, pred_action=None):
         if self._selected_traj is None:
-            return np.zeros(self.action_dim, dtype=np.float32)
-        cursor = min(self._selected_cursor, len(self._selected_traj) - 1)
-        action = self._selected_traj[cursor]
+            return None
+        if self._selected_cursor >= len(self._selected_traj):
+            return None
+        action = self._selected_traj[self._selected_cursor]
         self._selected_cursor += 1
         return np.asarray(action, dtype=np.float32)
     
@@ -210,100 +183,10 @@ class FastAPIDiffusionPolicyBackend:
     def on_step(self, traj_idx, step_idx):
         return None
 
-
-
-class DummyPolicyCallback:
-    def __init__(self, logdir="./logs", experiment_name="stackcube_sim", horizon=64,
-                 action_dim=4, dp_obs_horizon=2, dp_act_horizon=8, dp_pred_horizon=16):
-        self.logger = type("Logger", (object,),
-                          {"storage_path": logdir, "experiment_name": experiment_name})()
-        self.pred_obs = None
-        self.horizon = horizon
-        self.action_dim = action_dim
-        self.logged_steps = []
-        self._selected_traj = None
-        self._selected_cursor = 0
-        self._selected_step = 0
-        self.dp_obs_horizon = int(dp_obs_horizon)
-        self.dp_act_horizon = int(dp_act_horizon)
-        self.dp_pred_horizon = int(dp_pred_horizon)
-        self._dp_obs_history = None
-        self._worker_proc = None
-        self._worker_obs_dim = None
-
-    def on_begin_traj(self, traj_idx: int):
-        self.logged_steps = []
-        self._selected_traj = None
-        self._selected_cursor = 0
-        self._selected_step = 0
-        self._dp_obs_history = None
-
-    def get_candidate_plans_w_current_pose(self, obs, agent_choice=2, n_clusters=6):
-        state = _extract_stackcube_state(obs)
-        state_vec = np.asarray(state.get("state", np.zeros(0, dtype=np.float32)), dtype=np.float32).reshape(-1)
-        if state_vec.size == 0:
-            raise RuntimeError("State vector is empty")
-
-        current_pose = state.get("tcp_pose", np.zeros(7, dtype=np.float32))
-        obs_dim = int(state_vec.shape[0])
-
-        if self._dp_obs_history is None or self._dp_obs_history.shape[1] != obs_dim:
-            self._dp_obs_history = np.stack([state_vec] * self.dp_obs_horizon, axis=0)
-        else:
-            self._dp_obs_history = np.roll(self._dp_obs_history, shift=-1, axis=0)
-            self._dp_obs_history[-1] = state_vec
-
-        obs_batch = np.repeat(self._dp_obs_history[None], n_clusters, axis=0)
-
-        print(f"[DIFFUSION] Sending obs_batch shape {obs_batch.shape} to worker")
-        _pipe_send(self._worker_proc, {"cmd": "infer", "obs_batch": obs_batch})
-        response = _pipe_recv(self._worker_proc)
-
-        if not isinstance(response, dict) or not response.get("ok"):
-            err_msg = response.get('error', '?') if isinstance(response, dict) else str(response)
-            raise RuntimeError(f"Worker inference error: {err_msg}")
-
-        trajs = np.asarray(response["actions"], dtype=np.float32)
-        if trajs.ndim != 3:
-            trajs = trajs.reshape(n_clusters, -1, self.action_dim)
-        if trajs.shape[-1] < self.action_dim:
-            trajs = np.pad(trajs, ((0, 0), (0, 0), (0, self.action_dim - trajs.shape[-1])))
-        elif trajs.shape[-1] > self.action_dim:
-            trajs = trajs[:, :, :self.action_dim]
-
-        aggregated_trajs = np.cumsum(trajs[:, :, :3], axis=1)
-        if trajs.shape[-1] > 3:
-            aggregated_trajs = np.concatenate([aggregated_trajs, trajs[:, :, 3:4]], axis=-1)
-
-        mode_probs = np.ones(len(trajs), dtype=np.float32) / max(len(trajs), 1)
-        labels = np.zeros(len(trajs), dtype=np.int64)
-        return trajs, trajs.copy(), aggregated_trajs, mode_probs, labels, current_pose
-
-    def set_traj_in_the_middle(self, selected_action, pred_action, step_idx: int):
-        self._selected_traj = np.asarray(selected_action, dtype=np.float32)
-        self._selected_cursor = 0
-        self._selected_step = step_idx
-
-    def get_action(self, obs, pred_action=None):
-        if self._selected_traj is None:
-            return np.zeros(self.action_dim, dtype=np.float32)
-        cursor = min(self._selected_cursor, len(self._selected_traj) - 1)
-        action = self._selected_traj[cursor]
-        self._selected_cursor += 1
-        return np.asarray(action, dtype=np.float32)
-
-    def log_obs(self, obs, action_dict):
-        self.logged_steps.append({"obs": obs, "action": action_dict})
-
-    def on_step(self, traj_idx, step_idx):
-        return None
-
-    def on_end_traj(self, traj_idx, traj_status):
-        return False
 
 
 class PolicyLoopSim:
-    def __init__(self, wm_config=None, env_meta=None, callbacks=None, T=50, mode="eval",
+    def __init__(self, wm_config=None, env_meta=None, callbacks=None, T=100, mode="eval",
                  logdir="./logs", answer_type="open-word", steering_mode="vlm", auto_start=False,
                  max_trajectories=1, plan_interval=50, peft_model=None, model_name=None,
                  seed=None, vlm_backend_mode="auto", vlm_server_url=None, vlm_timeout_s=45.0,
@@ -350,6 +233,7 @@ class PolicyLoopSim:
             self._init_vlm_backend()
 
         self.env_meta = env_meta or _default_env_meta()
+        self._human_render_enabled = self.env_meta.get("render_mode") == "human"
         self.env = self._make_env(self.env_meta)
         self.action_dim = self._infer_action_dim()
         self._default_zero_action = np.zeros(self.action_dim, dtype=np.float32)
@@ -664,14 +548,6 @@ class PolicyLoopSim:
 
 
     def _cleanup_resources(self):
-
-        for cb in self.callbacks:
-            if hasattr(cb, "_shutdown_worker"):
-                try:
-                    cb._shutdown_worker()
-                except Exception:
-                    pass
-
         if self.vlm_backend is not None:
             if hasattr(self.vlm_backend, "close"):
                 try:
@@ -717,6 +593,20 @@ class PolicyLoopSim:
 
 
 
+    def _render_if_human(self) -> None:
+        if not self._human_render_enabled or self.env is None:
+            return
+        try:
+            self.env.render()
+        except Exception as exc:
+            print(f"[RENDER] viewer update failed: {exc}")
+
+    def _episode_seed(self, traj_idx: int) -> int | None:
+        if self.seed is None:
+            return None
+        # Offset seed by trajectory index so each reset can sample a different layout.
+        return int(self.seed) + int(traj_idx)
+
     def run(self):
         traj_idx = 0
         try:
@@ -728,7 +618,11 @@ class PolicyLoopSim:
                 else:
                     print(f"[TRAJ] Starting {traj_idx}")
 
-                obs, info = self._reset_env(self.env, seed=self.seed)
+                episode_seed = self._episode_seed(traj_idx)
+                obs, info = self._reset_env(self.env, seed=episode_seed)
+                if episode_seed is not None:
+                    print(f"[TRAJ] reset seed={episode_seed}")
+                self._render_if_human()
 
                 for cb in self.callbacks:
                     cb.pred_obs = copy.deepcopy(obs)
@@ -750,10 +644,15 @@ class PolicyLoopSim:
 
                 for step_idx in range(self.T):
                     steps += 1
+                    self._render_if_human()
                     state_vec = self._state_vector(obs)
                     action = None
 
-                    if step_idx == next_plan_step:
+                    selected_chunk_done = (
+                        selected_traj is not None
+                        and (step_idx - start_index) >= len(selected_traj)
+                    )
+                    if step_idx >= next_plan_step or selected_chunk_done:
                         (actions_candidates, pred_actions_candidates, vlm_labels, vlm_pred_2,
                          pred_frames, mode_probs, labels, current_pose) = \
                             self.generate_plans(obs, step_idx, question_key=question_key)
@@ -796,7 +695,8 @@ class PolicyLoopSim:
                                     step_idx)
 
                         start_index = step_idx
-                        next_plan_step = step_idx + self.plan_interval
+                        chunk_horizon = max(1, len(selected_traj))
+                        next_plan_step = step_idx + min(self.plan_interval, chunk_horizon)
 
                     for cb in self.callbacks:
                         if hasattr(cb, "get_action"):
@@ -809,6 +709,7 @@ class PolicyLoopSim:
 
                     action = self._coerce_action(action)
                     new_obs, reward, terminated, truncated, info = self._step_env(self.env, action)
+                    self._render_if_human()
 
                     action_dict = {
                         "action": action, "reward": reward, "terminated": terminated,
@@ -905,11 +806,13 @@ def main():
     parser.add_argument("--env-id", default="StackCube-v1")
     parser.add_argument("--obs-mode", default="state")
     parser.add_argument("--control-mode", default="pd_ee_delta_pos")
-    parser.add_argument("--max-episode-steps", type=int, default=30)
-    parser.add_argument("--traj-len", type=int, default=50)
+    parser.add_argument("--max-episode-steps", type=int, default=100)
+    parser.add_argument("--traj-len", type=int, default=None,
+                        help="Per-trajectory control steps; defaults to --max-episode-steps when omitted")
     parser.add_argument("--plan-interval", type=int, default=50)
     parser.add_argument("--max-trajectories", type=int, default=10)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Base seed. When set, each trajectory uses seed+traj_idx")
     parser.add_argument("--auto-start", action="store_true")
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--steering-mode", default="vlm", choices=("vlm",))
@@ -918,9 +821,9 @@ def main():
     parser.add_argument("--model-name",
                         default="/data/mllama/Llama-3.2-11B-Vision-Instruct/custom")
     parser.add_argument("--peft-model", default=None)
-    parser.add_argument("--diffusion-backend", default="subprocess",
-                        choices=("subprocess", "fastapi"),
-                        help="Backend for diffusion policy: subprocess or fastapi")
+    parser.add_argument("--diffusion-backend", default="fastapi",
+                        choices=("fastapi",),
+                        help="Backend for diffusion policy")
     parser.add_argument("--diffusion-server-url", default="http://127.0.0.1:9001",
                         help="URL of fastapi diffusion server")
     parser.add_argument("--dp-obs-horizon", type=int, default=2)
@@ -942,22 +845,17 @@ def main():
         max_episode_steps=args.max_episode_steps,
         render_mode="human" if args.render else None)
 
-    if args.diffusion_backend == "fastapi":
-        print(f"[MAIN] FastAPI backend: {args.diffusion_server_url}")
-        policy = FastAPIDiffusionPolicyBackend(
-            logdir=args.logdir, horizon=64, action_dim=4,
-            server_url=args.diffusion_server_url,
-            dp_obs_horizon=args.dp_obs_horizon, dp_act_horizon=args.dp_act_horizon,
-            dp_pred_horizon=args.dp_pred_horizon)
-    else:
-        print("[MAIN] Subprocess backend")
-        policy = DummyPolicyCallback(
-            logdir=args.logdir, horizon=64, action_dim=4,
-            dp_obs_horizon=args.dp_obs_horizon, dp_act_horizon=args.dp_act_horizon,
-            dp_pred_horizon=args.dp_pred_horizon)
+    print(f"[MAIN] FastAPI backend: {args.diffusion_server_url}")
+    policy = FastAPIDiffusionPolicyBackend(
+        logdir=args.logdir, horizon=64, action_dim=4,
+        server_url=args.diffusion_server_url,
+        dp_obs_horizon=args.dp_obs_horizon, dp_act_horizon=args.dp_act_horizon,
+        dp_pred_horizon=args.dp_pred_horizon)
+
+    traj_len = args.traj_len if args.traj_len is not None else args.max_episode_steps
 
     loop = PolicyLoopSim(
-        wm_config=wm_config, env_meta=env_meta, callbacks=[policy], T=args.traj_len,
+        wm_config=wm_config, env_meta=env_meta, callbacks=[policy], T=traj_len,
         logdir=args.logdir, answer_type=args.answer_type,
         steering_mode=args.steering_mode, auto_start=args.auto_start,
         max_trajectories=args.max_trajectories, plan_interval=args.plan_interval,
