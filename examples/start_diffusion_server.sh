@@ -42,6 +42,7 @@ python "${SCRIPT_DIR}/diffusion_policy_server.py" \
     --policy-ckpt "$POLICY_CKPT" \
     --obs-dim 48 \
     --train-script "$TRAIN_SCRIPT" \
+    --candidate-generation-mode "affine_corrupt" \
     --host 127.0.0.1 \
     --port "$PORT"
 

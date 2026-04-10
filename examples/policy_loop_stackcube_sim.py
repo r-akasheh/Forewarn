@@ -84,7 +84,7 @@ def _default_env_meta(env_id="StackCube-v1", obs_mode="state",
 class FastAPIDiffusionPolicyBackend:
     def __init__(self, logdir="./logs", experiment_name="stackcube_sim", horizon=64,
                  action_dim=4, server_url="http://127.0.0.1:9001",
-                 dp_obs_horizon=2, dp_act_horizon=8, dp_pred_horizon=16, timeout_s=30.0):
+                 dp_obs_horizon=2, dp_act_horizon=8, dp_pred_horizon=16, timeout_s=120.0):
         if requests is None:
             raise ImportError("requests required for FastAPI backend")
         self.logger = type("Logger", (object,),
