@@ -139,6 +139,8 @@ def train_eval(config):
     dataset_loader = getattr(config, "dataset_loader", "real_data")
     if dataset_loader == "maniskill_privileged":
         fill_dataset_fn = tools.fill_expert_dataset_maniskill_privileged
+    elif dataset_loader == "maniskill_rgb":
+        fill_dataset_fn = tools.fill_expert_dataset_maniskill_rgb
     else:
         fill_dataset_fn = tools.fill_expert_dataset_real_data
 
@@ -513,21 +515,24 @@ if __name__ == "__main__":
         parser.add_argument(f"--{key}", type=arg_type, default=arg_type(value))
 
     # Always expose dataset-loader overrides even if omitted in legacy config files.
-    parser.add_argument(
-        "--dataset_loader",
-        type=str,
-        default=defaults.get("dataset_loader", "real_data"),
-    )
-    parser.add_argument(
-        "--success_data",
-        type=str,
-        default=defaults.get("success_data", None),
-    )
-    parser.add_argument(
-        "--failure_data",
-        type=str,
-        default=defaults.get("failure_data", None),
-    )
+    if "dataset_loader" not in defaults:
+        parser.add_argument(
+            "--dataset_loader",
+            type=str,
+            default=defaults.get("dataset_loader", "real_data"),
+        )
+    if "success_data" not in defaults:
+        parser.add_argument(
+            "--success_data",
+            type=str,
+            default=defaults.get("success_data", None),
+        )
+    if "failure_data" not in defaults:
+        parser.add_argument(
+            "--failure_data",
+            type=str,
+            default=defaults.get("failure_data", None),
+        )
 
     final_config = parser.parse_args(remaining)
 

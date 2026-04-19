@@ -1,0 +1,227 @@
+defaults:
+
+  logdir: "logs/dreamer_cont"
+  traindir: null
+  evaldir: null
+  offline_traindir: ''
+  offline_evaldir: ''
+  seed: 0
+  deterministic_run: True
+  steps: 1e6
+  parallel: False
+  eval_every: 500
+  eval_num_seeds: 50
+  eval_per_seed: 1
+  log_every: 100
+  log_every_video: 2000
+  reset_every: 0
+  device: 'cuda:0'
+  compile: True
+  precision: 32
+  debug: False
+  video_pred_log: False
+  from_ckpt: null
+
+  from_prefill_dir: null
+  obs_step: 1
+
+# Training
+  wandb_name: 'wm_pickcube_rgb_bs_16_bl_64'
+  batch_size: 16
+  batch_length: 64
+  train_ratio: 1024
+  pretrain: 100
+  model_lr: 1e-4
+  obs_lr: 1e-3
+  decay_model_lr: false
+  opt_eps: 1e-8
+  grad_clip: 1000
+  dataset_size: 1000000
+  opt: 'adam'
+
+  # Debug configs:
+  done_mode: 0
+  bc_loss_only: False
+  ignore_base_policy: False
+  augment_images: False
+  seed_in_batches: True
+  validation_mse_trajs: 46
+
+  # Mixed data pretraining
+  pretrain_on_random: False
+  pretrain_on_random_mixed: False
+
+  # Data path - PickCube dataset
+  root_dir: '/home/rakasheh/master/cassandra/data_misc'
+  success_data: 'successful_labeled.h5'
+  failure_data: 'corrupted_labeled.h5'
+
+  # maniskill_state_slice can be set to None for all state dims, or specify [0:9] etc
+  maniskill_state_slice: null
+
+  exp_name: 'wm_pickcube_state_only'
+  image_size: 64
+
+  shape_rewards: True
+  shift_rewards: False
+  multi_task_data: False
+  num_exp_trajs: 450  # Use ALL trajectories (150 success + 300 failure)
+
+  # RGB camera key for observations
+  obs_keys: ["base_camera_rgb"]
+
+  # State comes from obs/agent/qpos
+  state_keys: ["agent/qpos"]
+
+  ## configuration of action and state space
+  action_space: [7]
+  observation_space: {
+    'state': [9],
+    'base_camera_rgb': [128, 128, 3],
+    'discount': [1],
+  }
+
+  # Pretraining
+  pretrain_bc_loss_only: True
+  pretrain_separately: False
+  pretrain_joint_steps: 100000
+  pretrain_annealing: null
+  pretrain_actor_steps: 0
+  pretrain_loss: 'ce'
+  pretrain_ema: False
+  ema_decay: 0.999
+  ema_power: 0.8
+  recon_pretrain: True
+  dropout_recurrent_prob: 0
+  initial_joint_train_steps: 0
+
+  ## classifier configs
+  classifier_epoch: 50
+  classifier_batch_size: 32
+  classifier_batch_length: 1500
+  classifier_mode: 'split'
+  classifier_latent_mode: 'all'
+  classifier_padding_mode: 'last'
+  transformer:
+    enabled: True
+    supervise_all_steps: False
+    pred_future_acs: False
+    context_length: 1500
+    causal: True
+    num_layers: 1
+    embed_dim: 64
+    num_heads: 1
+    attn_dropout: 0.05
+    emb_dropout: 0.05
+    block_output_dropout: 0.05
+    activation: "gelu"
+    nn_parameter_for_timesteps: False
+    sinusoidal_embedding: True
+
+  # Hybrid Training
+  hybrid_training: True
+  pretrain_reward_val: null
+  separate_reward_training: True
+
+  # RLPD-esque
+  hybrid_critic_fitting: False
+  critic_ensemble_size: 1
+  critic_ensemble_subsample: 2
+  critic_reset_every: 0
+  utd_ratio: 1
+
+  # Pessimism in model
+  reward_ensemble_size: 1
+  reward_ensemble_subsample: 1
+  cont_ensemble_size: 1
+  cont_ensemble_subsample: 1
+
+  # Batch Training
+  steps_per_batch: 100
+  model_only_scale: 0.0
+  actor_only_scale: 0.0
+  no_joint_steps: False
+  mask_recur: False
+  dropout_recur_in_residuals: False
+  freeze_encoder: True
+
+  # Boosting
+  train_residuals: True
+  ensemble_residuals: False
+  residual_discount: 0.95
+  residual_init_zeros: False
+
+  # BC-reg
+  bc_reg: True
+  bc_reg_weight: 1.0
+  bc_reg_wd: 1.0
+
+  # Environment
+  task: 'PickCube-v1'
+  size: [64, 64]
+  envs: 1
+  action_repeat: 1
+  time_limit: 100
+  grayscale: False
+  prefill: 5000
+  reward_EMA: True
+  use_reward: False
+  use_additional_projection: False
+
+  # Model
+  dyn_hidden: 512
+  dyn_deter: 512
+  dyn_stoch: 32
+  dyn_discrete: 0
+  dyn_rec_depth: 1
+  dyn_mean_act: 'none'
+  dyn_std_act: 'sigmoid2'
+  dyn_min_std: 0.1
+  grad_heads: ['decoder', 'cont']
+  units: 512
+  act: 'SiLU'
+  norm: True
+  encoder:
+    {mlp_keys: 'state', cnn_keys: '.*image.*', act: 'SiLU', norm: True, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, symlog_inputs: True}
+  decoder:
+    {mlp_keys: 'state', cnn_keys: '.*image.*', act: 'SiLU', norm: True, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, cnn_sigmoid: False, image_dist: mse, vector_dist: symlog_mse, outscale: 1.0}
+  actor:
+    {layers: 2, dist: 'normal', entropy: 3e-4, unimix_ratio: 0.01, std: 'learned', min_std: 0.1, max_std: 1.0, temp: 0.1, lr: 3e-5, eps: 1e-5, grad_clip: 100.0, outscale: 1.0}
+  critic:
+    {layers: 2, dist: 'symlog_disc', slow_target: True, slow_target_update: 1, slow_target_fraction: 0.02, lr: 3e-5, eps: 1e-5, grad_clip: 100.0, outscale: 0.0}
+  reward_head:
+    {layers: 2, dist: 'symlog_disc', loss_scale: 1.0, outscale: 0.0}
+  cont_head:
+    {layers: 2, loss_scale: 1.0, outscale: 1.0}
+  dyn_scale: 0.5
+  rep_scale: 0.1
+  kl_free: 1.0
+  weight_decay: 0.0
+  unimix_ratio: 0.01
+  initial: 'learned'
+  sample_freq: 2
+
+  # Behavior
+  discount: 0.997
+  discount_lambda: 0.95
+  imag_horizon: 15
+  imag_gradient: 'dynamics'
+  imag_gradient_mix: 0.0
+  eval_state_mean: False
+
+  # Exploration
+  expl_behavior: 'greedy'
+  expl_until: 0
+  expl_extr_scale: 0.0
+  expl_intr_scale: 1.0
+  disag_target: 'stoch'
+  disag_log: True
+  disag_models: 10
+  disag_offset: 1
+  disag_layers: 4
+  disag_units: 400
+  disag_action_cond: False
+
+  # Action type (delta poses)
+  action_type: 'delta'
+

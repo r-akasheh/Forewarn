@@ -724,12 +724,340 @@ def fill_expert_dataset_maniskill_privileged(config, cache, is_val_set=False, pa
             if failure_ctx is not None:
                 failure_ctx.close()
 
+def fill_expert_dataset_maniskill_rgb(config, cache, is_val_set=False, padding=None):
+    """
+    Load ManiSkill demonstrations with RGB images from nested HDF5 structure.
+    Handles data layout like:
+    - RGB images: obs/sensor_data/base_camera/rgb (T, 128, 128, 3)
+    - State data: obs/agent/qpos (T, 9)
+    - Actions: actions (T, 7)
 
+    Returns data in the format expected by the dreamer training loop.
+    """
+    del padding
+    from common.utils import get_maniskill_rgb_dataset_path_and_env_meta
 
+    sample_freq = config.sample_freq if hasattr(config, "sample_freq") else 1
+    action_type = getattr(config, "action_type", "delta")
 
+    # Get file paths from config
+    dataset_paths, _ = get_maniskill_rgb_dataset_path_and_env_meta(config=config, env_id=None, done_mode=config.done_mode)
+    success_path = dataset_paths["success"]
+    failure_path = dataset_paths.get("failure", None)
 
+    def _list_demos(h5f):
+        """List demo groups from HDF5 file."""
+        container = h5f["data"] if "data" in h5f else h5f
+        demos = [k for k in container.keys() if isinstance(container[k], h5py.Group)]
+        try:
+            demos = sorted(demos, key=lambda x: int(x.split("_")[-1]))
+        except Exception:
+            demos = sorted(demos)
+        return container, demos
 
+    def _get_nested_value(obj, path):
+        """Navigate nested group/dataset structure."""
+        for key in path.split("/"):
+            obj = obj[key]
+        return obj
 
+    def _load_norm_dict(dataset_path):
+        """Load normalization dictionary from JSON file."""
+        dataset_dir = os.path.dirname(dataset_path)
+        norm_path = os.path.join(dataset_dir, f"norm_dict_{action_type}.json")
+        if not os.path.exists(norm_path):
+            return None
+        with open(norm_path, "r") as file:
+            norm_dict = json.load(file)
+        for key in norm_dict.keys():
+            norm_dict[key] = np.array(norm_dict[key], dtype=np.float32)
+        return norm_dict
+
+    def _normalize(data, data_min, data_max):
+        """Normalize data to [-1, 1] range."""
+        denom = np.maximum(data_max - data_min, 1e-6)
+        return 2.0 * ((data - data_min) / denom) - 1.0
+    
+    def _resize_rgb_to_target(rgb_data, target_size=128):
+        """Resize RGB images to target size if needed. Handles both single images and sequences."""
+        if rgb_data.ndim == 3:  # Single image (H, W, C)
+            h, w = rgb_data.shape[:2]
+            if h == target_size and w == target_size:
+                return rgb_data
+            # Use cv2.resize for efficient downsampling
+            return cv2.resize(rgb_data, (target_size, target_size), interpolation=cv2.INTER_AREA)
+        elif rgb_data.ndim == 4:  # Sequence of images (T, H, W, C)
+            h, w = rgb_data.shape[1:3]
+            if h == target_size and w == target_size:
+                return rgb_data
+            # Resize each frame
+            resized = np.zeros((rgb_data.shape[0], target_size, target_size, rgb_data.shape[3]), dtype=rgb_data.dtype)
+            for t in range(len(rgb_data)):
+                resized[t] = cv2.resize(rgb_data[t], (target_size, target_size), interpolation=cv2.INTER_AREA)
+            return resized
+        return rgb_data
+    
+    def _select_split(items):
+        """Select training/validation split of trajectories."""
+        num_exp_trajs = len(items) if config.num_exp_trajs == -1 else config.num_exp_trajs
+        if is_val_set:
+            start = min(num_exp_trajs, len(items))
+            end = min(len(items), start + config.validation_mse_trajs)
+            if start >= len(items):
+                val_count = min(len(items), config.validation_mse_trajs)
+                if val_count == 0:
+                    return []
+                cprint(
+                    "Not enough holdout trajectories for validation; reusing last trajectories for val split.",
+                    color="yellow",
+                    attrs=["bold"],
+                )
+                return items[-val_count:]
+        else:
+            start = 0
+            end = min(len(items), num_exp_trajs)
+        return items[start:end]
+
+    with h5py.File(success_path, "r") as success_file:
+        success_container, success_demos = _list_demos(success_file)
+
+        failure_ctx = h5py.File(failure_path, "r") if failure_path else None
+        try:
+            if failure_ctx is not None:
+                failure_container, failure_demos = _list_demos(failure_ctx)
+            else:
+                failure_container, failure_demos = None, []
+
+            all_items = [("success", demo, 1) for demo in success_demos] + [
+                ("failure", demo, 0) for demo in failure_demos
+            ]
+            selected_items = _select_split(all_items)
+            if not selected_items:
+                raise ValueError("No trajectories selected for this split.")
+
+            # Get first trajectory to infer dimensions
+            first_source, first_demo, _ = selected_items[0]
+            first_group = success_container[first_demo] if first_source == "success" else failure_container[first_demo]
+
+            # Extract state dimension
+            state_keys = config.state_keys if isinstance(config.state_keys, (list, tuple)) else [config.state_keys]
+            state_dim = 0
+            
+            # Helper to get subkeys to load
+            def _get_subkeys_to_load(state_key, state_data):
+                """Determine which subkeys to load from a group or use the dataset as-is."""
+                if not isinstance(state_data, h5py.Group):
+                    return [state_key]
+                # For groups, check if specific subkeys are requested
+                if "/" in state_key:
+                    # e.g., "agent/qpos" - specific subkey requested
+                    return [state_key]
+                # Default: load all subkeys from the group (sorted for consistency)
+                subkeys = sorted(state_data.keys())
+                return [f"{state_key}/{subkey}" for subkey in subkeys]
+            
+            for state_key in state_keys:
+                state_data = _get_nested_value(first_group["obs"], state_key)
+                subkeys_to_load = _get_subkeys_to_load(state_key, state_data)
+                
+                for subkey_path in subkeys_to_load:
+                    subkey_data = _get_nested_value(first_group["obs"], subkey_path)
+                    if isinstance(subkey_data, h5py.Group):
+                        # Shouldn't happen after _get_subkeys_to_load, but handle it
+                        for sk in sorted(subkey_data.keys()):
+                            sv = np.asarray(subkey_data[sk][0], dtype=np.float32).flatten()
+                            state_dim += len(sv)
+                    else:
+                        state_vec = np.asarray(subkey_data[0], dtype=np.float32).flatten()
+                        state_dim += len(state_vec)
+
+            # Extract action dimension
+            if action_type == "abs" and "actions_abs" in first_group:
+                action_key = "actions_abs"
+            elif "actions" in first_group:
+                action_key = "actions"
+            elif "actions_abs" in first_group:
+                action_key = "actions_abs"
+            else:
+                raise KeyError("No action dataset found")
+
+            first_act = np.asarray(first_group[action_key][0], dtype=np.float32)
+            action_dim = int(np.prod(first_act.shape))
+            action_space = Box(-1, 1, shape=(action_dim,), dtype=np.float32)
+
+            # Get RGB image dimensions
+            rgb_shape = first_group["obs"]["sensor_data"]["base_camera"]["rgb"][0].shape
+
+            # Build observation space
+            obs_space = {
+                "state": Box(-1, 1, shape=(state_dim,), dtype=np.float32),
+                "base_camera_rgb": Box(0, 255, shape=rgb_shape, dtype=np.uint8),
+                "is_terminal": Discrete(2),
+                "is_first": Discrete(2),
+                "is_last": Discrete(2),
+                "discount": Box(0, 1, shape=(1,), dtype=np.float32),
+            }
+            observation_space = Dict(obs_space)
+
+            # Load or compute normalization stats
+            norm_dict = _load_norm_dict(success_path)
+            if norm_dict is None:
+                ob_min = np.full((state_dim,), np.inf, dtype=np.float32)
+                ob_max = np.full((state_dim,), -np.inf, dtype=np.float32)
+                ac_min = np.full((action_dim,), np.inf, dtype=np.float32)
+                ac_max = np.full((action_dim,), -np.inf, dtype=np.float32)
+
+                for source_name, demo_key, _ in selected_items:
+                    traj_group = success_container[demo_key] if source_name == "success" else failure_container[demo_key]
+                    
+                    # Extract states
+                    state_list = []
+                    obs_group = traj_group["obs"]
+                    
+                    # Determine sequence length from first state key
+                    first_state_key = state_keys[0] if isinstance(state_keys, (list, tuple)) else [state_keys][0]
+                    first_key_data = _get_nested_value(obs_group, first_state_key)
+                    if isinstance(first_key_data, h5py.Group):
+                        # Get length from first subkey
+                        first_subkey = list(first_key_data.keys())[0]
+                        seq_len = len(first_key_data[first_subkey])
+                    else:
+                        seq_len = len(first_key_data)
+                    
+                    for t in range(seq_len):
+                        state_parts = []
+                        for state_key in state_keys:
+                            state_data = _get_nested_value(obs_group, state_key)
+                            if isinstance(state_data, h5py.Group):
+                                # For groups, concatenate all subkeys
+                                for subkey in sorted(state_data.keys()):
+                                    state_vec = np.asarray(state_data[subkey][t], dtype=np.float32).flatten()
+                                    state_parts.append(state_vec)
+                            else:
+                                # For datasets, use directly
+                                state_vec = np.asarray(state_data[t], dtype=np.float32).flatten()
+                                state_parts.append(state_vec)
+                        state_list.append(np.concatenate(state_parts))
+                    
+                    states = np.array(state_list, dtype=np.float32)
+
+                    # Extract actions
+                    actions = np.asarray(traj_group[action_key], dtype=np.float32)
+                    if actions.ndim > 1:
+                        actions = actions.reshape(len(actions), -1)
+
+                    # Align sequence lengths
+                    seq_len = min(len(states), len(actions))
+                    states = states[:seq_len]
+                    actions = actions[:seq_len]
+
+                    ob_min = np.minimum(ob_min, states.min(axis=0))
+                    ob_max = np.maximum(ob_max, states.max(axis=0))
+                    ac_min = np.minimum(ac_min, actions.min(axis=0))
+                    ac_max = np.maximum(ac_max, actions.max(axis=0))
+
+                norm_dict = {
+                    "ob_min": ob_min,
+                    "ob_max": ob_max,
+                    "ac_min": ac_min,
+                    "ac_max": ac_max,
+                }
+
+            # Load trajectories
+            for total_id, (source_name, demo_key, default_label) in enumerate(
+                tqdm(selected_items, desc="Loading ManiSkill RGB data", ncols=0, leave=False)
+            ):
+                traj_group = success_container[demo_key] if source_name == "success" else failure_container[demo_key]
+                obs_group = traj_group["obs"]
+
+                # Extract states
+                state_list = []
+                
+                # Determine sequence length from first state key
+                first_state_key = state_keys[0] if isinstance(state_keys, (list, tuple)) else [state_keys][0]
+                first_key_data = _get_nested_value(obs_group, first_state_key)
+                if isinstance(first_key_data, h5py.Group):
+                    first_subkey = list(first_key_data.keys())[0]
+                    seq_len = len(first_key_data[first_subkey])
+                else:
+                    seq_len = len(first_key_data)
+
+                for t in range(seq_len):
+                    state_parts = []
+                    for state_key in state_keys:
+                        state_data = _get_nested_value(obs_group, state_key)
+                        if isinstance(state_data, h5py.Group):
+                            # For groups, concatenate all subkeys
+                            for subkey in sorted(state_data.keys()):
+                                state_vec = np.asarray(state_data[subkey][t], dtype=np.float32).flatten()
+                                state_parts.append(state_vec)
+                        else:
+                            # For datasets, use directly
+                            state_vec = np.asarray(state_data[t], dtype=np.float32).flatten()
+                            state_parts.append(state_vec)
+                    state_list.append(np.concatenate(state_parts))
+
+                states = np.array(state_list, dtype=np.float32)
+
+                # Extract RGB images
+                rgb_data = np.asarray(obs_group["sensor_data"]["base_camera"]["rgb"], dtype=np.uint8)
+                # Resize to 128×128 if needed (handles both 128×128 and 512×512)
+                rgb_data = _resize_rgb_to_target(rgb_data, target_size=128)
+
+                # Extract actions
+                actions = np.asarray(traj_group[action_key], dtype=np.float32)
+                if actions.ndim > 1:
+                    actions = actions.reshape(len(actions), -1)
+
+                # Align sequence lengths
+                seq_len = min(len(states), len(actions), len(rgb_data))
+                states = states[:seq_len]
+                actions = actions[:seq_len]
+                rgb_data = rgb_data[:seq_len]
+
+                if seq_len == 0:
+                    continue
+
+                # Apply sampling frequency
+                states = states[sample_freq - 1 :: sample_freq]
+                actions = actions[sample_freq - 1 :: sample_freq]
+                rgb_data = rgb_data[sample_freq - 1 :: sample_freq]
+                seq_len = len(states)
+
+                # Normalize state and actions
+                normalized_state = _normalize(states, norm_dict["ob_min"], norm_dict["ob_max"]).astype(np.float32)
+                normalized_actions = _normalize(actions, norm_dict["ac_min"], norm_dict["ac_max"]).astype(np.float32)
+
+                label = int(traj_group.attrs.get("label", default_label))
+                key = f"exp_traj_{total_id}_0"
+                cache[key] = {
+                    "state": normalized_state,
+                    "base_camera_rgb": rgb_data,
+                    "action": normalized_actions,
+                    "discount": np.ones(seq_len, dtype=np.float32),
+                    "is_last": np.array([0] * (seq_len - 1) + [1], dtype=np.bool_),
+                    "is_terminal": np.zeros(seq_len, dtype=np.bool_),
+                    "is_first": np.array([1] + [0] * (seq_len - 1), dtype=np.bool_),
+                    "label": np.full(seq_len, label, dtype=np.int32),
+                }
+
+            if not is_val_set:
+                cprint(
+                    f"Loaded {len(selected_items)} RGB trajectories from ManiSkill datasets: {success_path}",
+                    color="magenta",
+                    attrs=["bold"],
+                )
+            else:
+                cprint(
+                    f"Loaded validation RGB trajectories from ManiSkill datasets: {success_path}",
+                    color="magenta",
+                    attrs=["bold"],
+                )
+
+            return observation_space, action_space, norm_dict, state_dim, action_dim
+        finally:
+            if failure_ctx is not None:
+                failure_ctx.close()
 
 
 
