@@ -39,9 +39,17 @@ def get_real_dataset_path_and_env_meta(
     env_id,
     done_mode = 0
 ):
-    dataset_path = Path(config.root_dir, config.success_data)
-    # env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=dataset_path)
-    return dataset_path, None
+    """Return real dataset paths for success/failure data."""
+    success_path = Path(config.root_dir, config.success_data)
+    failure_name = getattr(config, "failure_data", None)
+    failure_path = Path(config.root_dir, failure_name) if failure_name else None
+
+    if not success_path.exists():
+        raise FileNotFoundError(f"Success dataset not found: {success_path}")
+    if failure_path is not None and not failure_path.exists():
+        raise FileNotFoundError(f"Failure dataset not found: {failure_path}")
+
+    return {"success": success_path, "failure": failure_path}, None
 
 
 def get_maniskill_rgb_dataset_path_and_env_meta(config, env_id=None, done_mode=0):

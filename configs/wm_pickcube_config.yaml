@@ -1,6 +1,6 @@
 defaults:
 
-  logdir: "logs/dreamer_cont"
+  logdir: "home/rakasheh/checkpoints/dreamer_cont/new_wm_rgb"
   traindir: null
   evaldir: null
   offline_traindir: ''
@@ -20,7 +20,7 @@ defaults:
   precision: 32
   debug: False
   video_pred_log: False
-  from_ckpt: null
+  from_ckpt: 'home/rakasheh/rgb_pick_cube/data_misc/pretrain_joint.pt'
 
   from_prefill_dir: null
   obs_step: 1
@@ -52,7 +52,7 @@ defaults:
   pretrain_on_random_mixed: False
 
   # Data path - PickCube dataset
-  root_dir: '/home/rakasheh/master/cassandra/data_misc'
+  root_dir: '/home/rakasheh/rgb_pick_cube/data_misc'
   success_data: 'successful_labeled.h5'
   failure_data: 'corrupted_labeled.h5'
 
@@ -182,9 +182,9 @@ defaults:
   act: 'SiLU'
   norm: True
   encoder:
-    {mlp_keys: 'state', cnn_keys: '.*image.*', act: 'SiLU', norm: True, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, symlog_inputs: True}
+    {mlp_keys: 'state', cnn_keys: '.*rgb.*', act: 'SiLU', norm: True, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, symlog_inputs: True}
   decoder:
-    {mlp_keys: 'state', cnn_keys: '.*image.*', act: 'SiLU', norm: True, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, cnn_sigmoid: False, image_dist: mse, vector_dist: symlog_mse, outscale: 1.0}
+    {mlp_keys: 'state', cnn_keys: '.*rgb.*', act: 'SiLU', norm: True, cnn_depth: 32, kernel_size: 4, minres: 4, mlp_layers: 5, mlp_units: 1024, cnn_sigmoid: False, image_dist: mse, vector_dist: symlog_mse, outscale: 1.0}
   actor:
     {layers: 2, dist: 'normal', entropy: 3e-4, unimix_ratio: 0.01, std: 'learned', min_std: 0.1, max_std: 1.0, temp: 0.1, lr: 3e-5, eps: 1e-5, grad_clip: 100.0, outscale: 1.0}
   critic:

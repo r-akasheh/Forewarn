@@ -241,11 +241,30 @@ def merge_two_cache_dicts(cache1, cache2):
         
 
 
+def _get_obs_value(traj_obs, key, nested_sensor_data=None):
+    """
+    Helper to extract observation value from either flat or nested structure.
+    If key like 'base_camera_rgb' and nested_sensor_data is provided, looks in sensor_data/base_camera/rgb
+    """
+    if key in traj_obs:
+        return traj_obs[key]
+    
+    if nested_sensor_data and "_rgb" in key:
+        # Try to extract from sensor_data/camera_name/rgb structure
+        camera_name = key.replace("_rgb", "")
+        if camera_name in traj_obs.get("sensor_data", {}):
+            sensor_data_group = traj_obs["sensor_data"][camera_name]
+            if "rgb" in sensor_data_group:
+                return sensor_data_group["rgb"]
+    
+    raise KeyError(f"Could not find observation key: {key}")
+
+
 def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None):
     env_name = config.task.split("_", 1)[0]
     sample_freq = config.sample_freq if hasattr(config, 'sample_freq') else 1
     selected_obs_keys = config.obs_keys
-  
+   
     env_names = [env_name]
 
     # Initialize extra info to return
@@ -253,19 +272,30 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
     state_dim = None
     action_dim = None
     total_id = 0
+    nested_sensor_data = False  # Track if we're using nested sensor_data structure
 
     for env_name_id, env_name in enumerate(env_names):
-        ## load the dataset path and the env meta
+        ## load the dataset paths (success and failure)
        
-        dataset_path, _ = get_real_dataset_path_and_env_meta(
+        dataset_paths, _ = get_real_dataset_path_and_env_meta(
             env_id=env_name,
             config = config,
             done_mode=config.done_mode,
         )
+        
+        success_path = dataset_paths["success"]
+        failure_path = dataset_paths.get("failure", None)
+        
+        # List of (path, label) tuples to load
+        data_to_load = [
+            (success_path, 1),  # label 1 for success
+        ]
+        if failure_path:
+            data_to_load.append((failure_path, 0))  # label 0 for failure
        
-        f = h5py.File(dataset_path, "r")
+        f = h5py.File(success_path, "r")
         ## get the dir of dataset_path
-        dataset_dir = os.path.dirname(dataset_path)
+        dataset_dir = os.path.dirname(success_path)
         # read the norm_dict
         try:
             with open(os.path.join(dataset_dir, f'norm_dict_{getattr(config, "action_type", "delta")}.json'), 'r') as file:
@@ -276,52 +306,89 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
         except FileNotFoundError:
             norm_dict = None
         
-        # Iterate over all top-level keys as demos if 'data' is not present
+        # Collect all demos from both success and failure
+        all_demos = []
+        
+        # Load success demos
         if "data" in f:
-            demos = list(f["data"].keys())
+            success_demos = list(f["data"].keys())
         else:
-            demos = [k for k in f.keys() if 'demo' in k]
-            
+            success_demos = [k for k in f.keys() if 'demo' in k]
         try:
-            inds = np.argsort([int(elem.split('_')[-1]) for elem in demos])
-            demos = [demos[i] for i in inds]
+            inds = np.argsort([int(elem.split('_')[-1]) for elem in success_demos])
+            success_demos = [success_demos[i] for i in inds]
         except Exception:
             pass
+        all_demos.extend([(f, demo) for demo in success_demos])
         
+        # Load failure demos if available
+        failure_file = None
+        if failure_path:
+            failure_file = h5py.File(failure_path, "r")
+            if "data" in failure_file:
+                failure_demos = list(failure_file["data"].keys())
+            else:
+                failure_demos = [k for k in failure_file.keys() if 'demo' in k]
+            try:
+                inds = np.argsort([int(elem.split('_')[-1]) for elem in failure_demos])
+                failure_demos = [failure_demos[i] for i in inds]
+            except Exception:
+                pass
+            all_demos.extend([(failure_file, demo) for demo in failure_demos])
         
-        # if is_val_set, we don't fill the first num_exp_trajs which are used for training
+        # Split into train/val
         config.num_exp_trajs = (
-            len(demos) if config.num_exp_trajs == -1 else config.num_exp_trajs
+            len(all_demos) if config.num_exp_trajs == -1 else config.num_exp_trajs
         )
         if is_val_set:
-            
-            if config.num_exp_trajs >= len(demos):
+            if config.num_exp_trajs >= len(all_demos):
                 print('not enough expert data for val')
-                burn_in_trajs = 0 if is_val_set else 0 
+                burn_in_trajs = 0
             else:
-                burn_in_trajs = config.num_exp_trajs if is_val_set else 0
-        else: 
-            burn_in_trajs = config.num_exp_trajs if is_val_set else 0
+                burn_in_trajs = config.num_exp_trajs
+        else:
+            burn_in_trajs = 0
+            
         num_fill_trajs = (
-            min(len(demos), config.num_exp_trajs + config.validation_mse_trajs)
+            min(len(all_demos), config.num_exp_trajs + config.validation_mse_trajs)
             if is_val_set
             else config.num_exp_trajs
         )
-       
-        if "data" in f:
-            obs_keys = list(f['data'][demos[0]]['obs'].keys())
+        
+        # Get obs keys from first demo
+        first_file, first_demo_key, _ = all_demos[0]
+        if "data" in first_file:
+            obs_keys = list(first_file['data'][first_demo_key]['obs'].keys())
         else:
-            obs_keys = list(f[demos[0]]['obs'].keys())
+            obs_keys = list(first_file[first_demo_key]['obs'].keys())
 
+        # Extract pixel keys - handles both flat and nested structures
+        # First try direct keys with "cam" or "image"
         pixel_keys = sorted([key for key in obs_keys if "cam" in key or "image" in key])
-        pixel_keys = [k for k in pixel_keys if k in selected_obs_keys] or pixel_keys # default to all if none selected
+        
+        # If no direct pixel keys found, check for nested sensor_data structure
+        if not pixel_keys and "sensor_data" in obs_keys:
+            first_demo_obs = first_file["data"][first_demo_key]['obs'] if "data" in first_file else first_file[first_demo_key]['obs']
+            sensor_data = first_demo_obs.get("sensor_data", {})
+            if isinstance(sensor_data, h5py.Group):
+                # Look for camera data nested under sensor_data
+                for cam_name in sensor_data.keys():
+                    cam_group = sensor_data[cam_name]
+                    if isinstance(cam_group, h5py.Group) and "rgb" in cam_group:
+                        # Create a flat key name for nested RGB
+                        flat_key_name = f"{cam_name}_rgb"
+                        pixel_keys.append(flat_key_name)
+                nested_sensor_data = True
+                # Filter by selected_obs_keys if specified
+        if pixel_keys:
+            pixel_keys = sorted([k for k in pixel_keys if k in selected_obs_keys] or pixel_keys)
        
         state_keys = config.state_keys
         
         # Initialize norm_dict if it is None
         if norm_dict is None:
             # Read ob_dim and ac_dim from the first datapoint in the first demo
-            first_demo = f["data"][demos[0]] if "data" in f else f[demos[0]]
+            first_demo = first_file["data"][first_demo_key] if "data" in first_file else first_file[first_demo_key]
             ob_dim = 0
             for key in state_keys:
                 if key in first_demo["obs"]:
@@ -348,7 +415,7 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
                 "ac_min": np.inf * np.ones(ac_dim, dtype=np.float32),
             }
             
-        first_demo = f["data"][demos[0]] if "data" in f else f[demos[0]]
+        first_demo = first_file["data"][first_demo_key] if "data" in first_file else first_file[first_demo_key]
         action_key_fallback = "actions_abs" if "actions_abs" in first_demo else "actions"
         
         if 'obs' in first_demo and action_key_fallback in first_demo['obs']:
@@ -386,7 +453,8 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
             action_key = action_key_fallback
         
         for key in pixel_keys:
-            obs_space[key] = Box(0, 1, shape = first_demo["obs"][key].shape[1:])
+            pixel_data = _get_obs_value(first_demo["obs"], key, nested_sensor_data)
+            obs_space[key] = Box(0, 1, shape = pixel_data.shape[1:])
         for key in state_keys:
             if key in first_demo["obs"]:
                 obs_space[key] = Box(-1, 1, shape = first_demo["obs"][key].shape[1:])
@@ -399,8 +467,8 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
         
         observation_space = Dict(obs_space)
         
-        for i, demo in tqdm(
-            enumerate(demos),
+        for i, (demo_file, demo_key, _) in tqdm(
+            enumerate(all_demos),
             desc="Loading in expert data",
             ncols=0,
             leave=False,
@@ -409,10 +477,11 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
             if i < burn_in_trajs:
                 continue
             elif i >= num_fill_trajs:
-                print('last demo index', demos[i])
+                print('last demo index', demo_key)
                 break
 
-            traj = f["data"][demo] if "data" in f else f[demo]
+            traj = demo_file["data"][demo_key] if "data" in demo_file else demo_file[demo_key]
+            # Read label from the HDF5 attributes
             if 'label' in traj.attrs:
                 label = traj.attrs['label']
             else:
@@ -420,7 +489,9 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
 
             # Concat state keys to create "state" key
             concat_state = []
-            for t in range(len(traj["obs"][pixel_keys[0]])):
+            # Get the first pixel data using helper
+            first_pixel_data = _get_obs_value(traj["obs"], pixel_keys[0], nested_sensor_data)
+            for t in range(len(first_pixel_data)):
                 curr_obs_state_vec = [traj["obs"][obs_key][t] for obs_key in state_keys]
                 curr_obs_state_vec = np.concatenate(
                     curr_obs_state_vec, dtype=np.float32
@@ -434,9 +505,9 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
 
             stacked_obs["state"] = concat_state
             for key in pixel_keys:
-                stacked_obs[key] = traj["obs"][key]
+                stacked_obs[key] = _get_obs_value(traj["obs"], key, nested_sensor_data)
            
-            length = len(traj["obs"][pixel_keys[0]])
+            length = len(stacked_obs[pixel_keys[0]])
         
             
               
@@ -451,11 +522,14 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
                 ind_step = 0
             cache[f'exp_traj_{total_id}_{ind_step}']  = {}
             for key in pixel_keys:
-                obs_from_ind = np.array(traj["obs"][key])[ind_step::sample_freq]
-                ## concatenate the obs[key][1] to the beginning of the list 
+                pixel_data = _get_obs_value(traj["obs"], key, nested_sensor_data)
+                obs_from_ind = np.array(pixel_data)[ind_step::sample_freq]
+                ## concatenate the obs[key][1] to the beginning of the list
                 if length == 160 and env_name == 'GraspCup':
-                    obs_from_ind = np.concatenate([np.array(traj["obs"][key][1:2]), obs_from_ind], axis=0)
-                    
+                    obs_from_ind = np.concatenate([np.array(pixel_data)[1:2], obs_from_ind], axis=0)
+
+                # Normalize RGB images from 0-255 to 0-1 range
+                obs_from_ind = obs_from_ind.astype(np.float32) / 255.0
                 cache[f'exp_traj_{total_id}_{ind_step}'][key] = obs_from_ind
             state_from_ind = stacked_obs["state"][ind_step::sample_freq]
             if length == 160 and env_name == 'GraspCup':
@@ -475,6 +549,17 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
             normalized_actions = 2 * normalized_actions - 1
             cache[f'exp_traj_{total_id}_{ind_step}']['action'] = normalized_actions #subsample_actions
             size  = subsample_actions.shape[0]
+            
+            # Handle length mismatches - observation sequences may be one timestep longer than actions
+            # Trim observations to match action sequence length
+            for key in cache[f'exp_traj_{total_id}_{ind_step}']:
+                if key in pixel_keys or key == 'state':
+                    obs_len = len(cache[f'exp_traj_{total_id}_{ind_step}'][key])
+                    if obs_len > size:
+                        # Observation has one extra timestep (the final state after the last action)
+                        # Keep all timesteps except the last one to match action sequence
+                        cache[f'exp_traj_{total_id}_{ind_step}'][key] = cache[f'exp_traj_{total_id}_{ind_step}'][key][:size]
+            
             cache[f'exp_traj_{total_id}_{ind_step}']['discount'] = np.array([1]*size, dtype=np.float32)
             cache[f'exp_traj_{total_id}_{ind_step}']['is_last'] = np.array([0] * size, dtype=np.bool_)
             cache[f'exp_traj_{total_id}_{ind_step}']['is_terminal'] = np.array([0] * size, dtype=np.bool_)
@@ -493,17 +578,25 @@ def fill_expert_dataset_real_data(config, cache, is_val_set=False, padding=None)
         
         if not is_val_set:
             cprint(
-                f"Loading expert buffer with {config.num_exp_trajs} trajectories from {dataset_path}",
+                f"Loading expert buffer with {config.num_exp_trajs} trajectories from {success_path}",
                 color="magenta",
                 attrs=["bold"],
             )
+            if failure_path:
+                cprint(
+                    f"  + {len([x for x in all_demos if x[2] == 0])} failure trajectories from {failure_path}",
+                    color="magenta",
+                    attrs=["bold"],
+                )
         else:
             cprint(
-                f"Loading validation buffer with {config.validation_mse_trajs} trajectories from {dataset_path}",
+                f"Loading validation buffer with {config.validation_mse_trajs} trajectories from {success_path}",
                 color="magenta",
                 attrs=["bold"],
             )
     f.close()
+    if failure_file is not None:
+        failure_file.close()
     return  observation_space, action_space, norm_dict, state_dim, action_dim
 
 
@@ -890,9 +983,9 @@ def fill_expert_dataset_maniskill_rgb(config, cache, is_val_set=False, padding=N
 
             # Build observation space
             obs_space = {
-                "state": Box(-1, 1, shape=(state_dim,), dtype=np.float32),
-                "base_camera_rgb": Box(0, 255, shape=rgb_shape, dtype=np.uint8),
-                "is_terminal": Discrete(2),
+                 "state": Box(-1, 1, shape=(state_dim,), dtype=np.float32),
+                 "base_camera_rgb": Box(0, 1, shape=rgb_shape, dtype=np.float32),
+                 "is_terminal": Discrete(2),
                 "is_first": Discrete(2),
                 "is_last": Discrete(2),
                 "discount": Box(0, 1, shape=(1,), dtype=np.float32),
@@ -1003,7 +1096,6 @@ def fill_expert_dataset_maniskill_rgb(config, cache, is_val_set=False, padding=N
                 rgb_data = np.asarray(obs_group["sensor_data"]["base_camera"]["rgb"], dtype=np.uint8)
                 # Resize to 128×128 if needed (handles both 128×128 and 512×512)
                 rgb_data = _resize_rgb_to_target(rgb_data, target_size=128)
-
                 # Extract actions
                 actions = np.asarray(traj_group[action_key], dtype=np.float32)
                 if actions.ndim > 1:
@@ -1014,7 +1106,6 @@ def fill_expert_dataset_maniskill_rgb(config, cache, is_val_set=False, padding=N
                 states = states[:seq_len]
                 actions = actions[:seq_len]
                 rgb_data = rgb_data[:seq_len]
-
                 if seq_len == 0:
                     continue
 
@@ -1024,22 +1115,23 @@ def fill_expert_dataset_maniskill_rgb(config, cache, is_val_set=False, padding=N
                 rgb_data = rgb_data[sample_freq - 1 :: sample_freq]
                 seq_len = len(states)
 
+                # Normalize RGB images from 0-255 to 0-1 range
+                rgb_data = rgb_data.astype(np.float32) / 255.0
                 # Normalize state and actions
                 normalized_state = _normalize(states, norm_dict["ob_min"], norm_dict["ob_max"]).astype(np.float32)
                 normalized_actions = _normalize(actions, norm_dict["ac_min"], norm_dict["ac_max"]).astype(np.float32)
-
                 label = int(traj_group.attrs.get("label", default_label))
                 key = f"exp_traj_{total_id}_0"
                 cache[key] = {
-                    "state": normalized_state,
-                    "base_camera_rgb": rgb_data,
-                    "action": normalized_actions,
-                    "discount": np.ones(seq_len, dtype=np.float32),
-                    "is_last": np.array([0] * (seq_len - 1) + [1], dtype=np.bool_),
-                    "is_terminal": np.zeros(seq_len, dtype=np.bool_),
-                    "is_first": np.array([1] + [0] * (seq_len - 1), dtype=np.bool_),
-                    "label": np.full(seq_len, label, dtype=np.int32),
-                }
+                     "state": normalized_state,
+                     "base_camera_rgb": rgb_data,
+                     "action": normalized_actions,
+                     "discount": np.ones(seq_len, dtype=np.float32),
+                     "is_last": np.array([0] * (seq_len - 1) + [1], dtype=np.bool_),
+                     "is_terminal": np.zeros(seq_len, dtype=np.bool_),
+                     "is_first": np.array([1] + [0] * (seq_len - 1), dtype=np.bool_),
+                     "label": np.full(seq_len, label, dtype=np.int32),
+                 }
 
             if not is_val_set:
                 cprint(

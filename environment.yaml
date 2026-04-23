@@ -302,7 +302,7 @@ dependencies:
       - uritemplate==4.1.1
       - urllib3==2.2.3
       - uvicorn==0.32.0
-      - wandb==0.18.3
+      - wandb
       - wcmatch==8.5.2
       - wcwidth==0.2.13
       - webencodings==0.5.1
