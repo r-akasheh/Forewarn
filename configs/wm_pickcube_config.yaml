@@ -20,7 +20,7 @@ defaults:
   precision: 32
   debug: False
   video_pred_log: False
-  from_ckpt: 'home/rakasheh/rgb_pick_cube/data_misc/pretrain_joint.pt'
+  from_ckpt: '/workspace/data_misc/pretrain_joint.pt'
 
   from_prefill_dir: null
   obs_step: 1
@@ -59,7 +59,7 @@ defaults:
   # maniskill_state_slice can be set to None for all state dims, or specify [0:9] etc
   maniskill_state_slice: null
 
-  exp_name: 'wm_pickcube_state_only'
+  exp_name: 'wm_pickcube_rgb'
   image_size: 64
 
   shape_rewards: True

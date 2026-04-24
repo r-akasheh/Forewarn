@@ -31,13 +31,13 @@ WORKDIR /workspace
 # Copy code into container
 COPY . /workspace
 
-# Create conda environment from environment.yaml
+# Create conda environment from environment-gemma4.yaml
 RUN conda config --set auto_update_conda false && \
     conda config --set always_softlink false && \
     conda config --set auto_update_conda false && \
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
-    conda env create -f environment.yaml && conda clean -afy
+    conda env create -f environment-gemma4.yaml && conda clean -afy
 
 # ── CUDA / cuDNN library fixes ────────────────────────────────────────────────
 # pip-installed nvidia-* packages land under site-packages/nvidia/*/lib but are
@@ -79,7 +79,7 @@ SHELL ["conda", "run", "-n", "dreamer", "/bin/bash", "-c"]
 # Reset shell to normal bash temporarily
 SHELL ["/bin/bash", "-c"]
 
-# Skip pip install -r requirements.txt since environment.yaml already installed all packages
+# Skip pip install -r requirements.txt since environment-gemma4.yaml already installed all packages
 # The torch+cu118 version doesn't exist on PyPI anyway (conda handles CUDA variants)
 
 # Re-activate conda shell for remaining commands
